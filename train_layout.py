@@ -133,7 +133,6 @@ def load_data(data_path, k_nearest):
     inputs,oh_labels = preprocess_data(df)
     
     card_starts_indices, _ = split_to_cards(df)
-#     n_of_cards_training = 50 # check if necessary
     graphs = data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest)
     
     return graphs
@@ -222,6 +221,9 @@ def main():
 
     graphs = load_data(args.data_path, k_nearest=args.k_nearest)
 
+    if args.img_path is not None:
+        save_graph_imgs(args.img_path, args.data_path)
+    
     split_idx = 50
     train_dataset = graphs[split_idx:]
     test_dataset = graphs[:split_idx]
