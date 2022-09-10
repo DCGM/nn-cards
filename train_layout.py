@@ -8,18 +8,24 @@ import pandas as pd
 import argparse
 import logging
 
+import cv2
+import re
+import networkx as nx
+
 import torch
 import torch.nn.functional as F
+
 from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader
+from torch_geometric.utils import to_networkx
 
 from shapely.geometry import LineString, Point
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, MinMaxScaler, KBinsDiscretizer, FunctionTransformer
 
-from nets import net_factory
+from nnets import net_factory
 
 
-def parse_arguments():
+def parse_arguments(arguments):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--name', help='Model name', required=True)
@@ -39,8 +45,9 @@ def parse_arguments():
                         help="Json network config.")
     parser.add_argument('--optimization-config', default='{"type":"Adam"}')
     parser.add_argument('--k-nearest', default=4, type=int, help="K nearest neighbors when building the graph.")
+    parser.add_argument('--img-path',  type=str, help="Save images with graphs.")
 
-    args = parser.parse_args()
+    args = parser.parse_args(arguments)
     return args
 
 
@@ -56,19 +63,26 @@ def find_neighbours(line, card_lines, k_nearest=4):
 
     return list(res.items())[:k_nearest]
 
+def split_to_cards(data_frame):
+    cards = data_frame.cardName.to_numpy().reshape(-1, 1)
+    card_indices = np.unique(cards, return_index=True)
+    
+    card_names=[(x,y) for (x, y) in sorted(zip(card_indices[0], card_indices[1]), key=lambda pair: pair[1])]
 
-def load_data(data_path, k_nearest):
-    data = pd.read_csv(data_path, converters={'startX': float, 'startY': float,
-                                              'endX': float, 'endY': float})
-    df = pd.DataFrame(data)
+    card_indices[1].sort()
 
-    # Preprocess data
-    startX = df.startX.to_numpy().reshape(-1, 1) / 1200
-    startY = df.startY.to_numpy().reshape(-1, 1) / 1700
-    endX = df.endX.to_numpy().reshape(-1, 1) / 1200
-    endY = df.endY.to_numpy().reshape(-1, 1) / 1700
+    card_starts_indices = card_indices[1]
+    card_starts_indices = np.append(card_starts_indices, len(cards))
+    
+    return (card_starts_indices, card_names)
 
-    labels_data = np.array(df.label).reshape(-1, 1)
+def preprocess_data(data_frame):
+    startX = data_frame.startX.to_numpy().reshape(-1, 1) / 1200
+    startY = data_frame.startY.to_numpy().reshape(-1, 1) / 1700
+    endX = data_frame.endX.to_numpy().reshape(-1, 1) / 1200
+    endY = data_frame.endY.to_numpy().reshape(-1, 1) / 1700
+
+    labels_data = np.array(data_frame.label).reshape(-1, 1)
 
     int_encoder = LabelEncoder()
     labels = int_encoder.fit_transform(labels_data.ravel()).reshape(-1, 1)
@@ -77,16 +91,10 @@ def load_data(data_path, k_nearest):
     oh_labels = onehot_encoder.transform(labels)
 
     inputs = np.concatenate((startX, startY, endX, endY), axis=1)
+    
+    return (inputs,oh_labels)
 
-    n_of_cards_training = 50
-    cards = df.cardName.to_numpy().reshape(-1, 1)
-    card_indices = np.unique(cards, return_index=True)
-    card_indices[1].sort()
-
-    card_starts_indices = card_indices[1]
-
-    card_starts_indices = np.append(card_starts_indices, len(cards))
-
+def data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest):
     graphs = []
     # for each card
     for index, card in enumerate(card_starts_indices):
@@ -113,6 +121,67 @@ def load_data(data_path, k_nearest):
 
     return graphs
 
+def get_dataframe(data_path):
+    data = pd.read_csv(data_path, converters={'startX': float, 'startY': float,
+                                              'endX': float, 'endY': float})
+    df = pd.DataFrame(data)
+    return df
+
+
+def load_data(data_path, k_nearest):
+    df= get_dataframe(data_path)
+    inputs,oh_labels = preprocess_data(df)
+    
+    card_starts_indices, _ = split_to_cards(df)
+#     n_of_cards_training = 50 # check if necessary
+    graphs = data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest)
+    
+    return graphs
+
+def graph_to_image(path, graph, thickness=2, circles=True):
+    img = cv2.imread(path)
+    print(graph)
+    center_list=nx.get_node_attributes(graph, "pos")
+    lines=[]
+    color=(0, 0, 0)
+    
+    for u,v in graph.edges:
+        x1= int(np.round(center_list[u][0]*1200))
+        y1= int(np.round(center_list[u][1]*1700))
+        
+        x2= int(np.round(center_list[v][0]*1200))
+        y2= int(np.round(center_list[v][1]*1700))
+
+        cv2.line(img, (x1,y1),(x2,y2), color, thickness)
+        if circles:
+            cv2.circle(img, (x1,y1), 3, color, 4)
+            cv2.circle(img, (x2,y2), 3, color, 4)
+    return img
+
+def get_graph_imgs(csv_path):
+    graphs = load_data(csv_path, 8)#csv_path
+
+    df= get_dataframe(csv_path)    
+    _,card_names = split_to_cards(df)
+    return (card_names,graphs)
+
+def save_graph_imgs(imgs_path, csv_path):
+    card_names,graphs= get_graph_imgs(csv_path)
+    
+    for card_idx, card in enumerate(card_names):
+        graph = to_networkx(graphs[card_idx], node_attrs=["x", "pos"], to_undirected=True)
+        
+        card_name=re.sub("[^A-Za-z-_.]","",card_names[card_idx][0])
+        card_img_path=imgs_path+card_name
+        img= image.imread(card_img_path)
+        # img
+        if not os.path.exists(card_img_path + "/withGraph"):
+            os.makedirs(card_img_path + "/withGraph")
+            
+        new_file_name = card_img_path + "withGraph/" + card.name
+        img = graph_to_image(card_img_path, graph, circles=True)
+        
+        cv2.imwrite(new_file_name, img)
 
 def test(data_loader, model):
     model = model.eval()
