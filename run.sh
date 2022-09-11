@@ -14,6 +14,7 @@ do
 python -u $SCRIPT --name test -d $DATA \
     --batch-size 24 --learning-rate 0.0002 --max-iteration 50000 \
     --net-config "{\"type\":\"gcn\", \"gcn_layers\":${gcn_layers}, \"gcn_repetitions\":${gcn_repetitions}, \"hidden_dim\":64, \"layer_type\":\"${layer_type}\", \"activation\":\"${activation}\"}" \
+    --aug "{\"Affine\": {\"scale\": [0.8, 0.8],\"rotate\": 15,\"shear\": 20}, \"Multiply\": [1.2, 1.5]}"\
     | tee -a log_GCN_${layer_type}_${activation}_d64_l${gcn_layers}_r${gcn_repetitions}.log
 
 done
