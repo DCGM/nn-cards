@@ -46,10 +46,75 @@ def parse_arguments(arguments):
     parser.add_argument('--optimization-config', default='{"type":"Adam"}')
     parser.add_argument('--k-nearest', default=4, type=int, help="K nearest neighbors when building the graph.")
     parser.add_argument('--img-path',  type=str, help="Save images with graphs.")
+    parser.add_argument('--aug',  type=str, help="Augumentation config")
 
     args = parser.parse_args(arguments)
     return args
 
+def parse_affine(scale=None, translate_percent=None, translate_px=None, rotate=None, shear=None):
+    affine_res=iaa.Affine(scale=scale, translate_percent=translate_percent, translate_px=translate_px, rotate=rotate, shear=shear)
+    return affine_res
+    
+def parse_augumentation(Affine=None, Multiply=None, Fliplr=None, Flipud=None, 
+                        GaussianBlur=None, Crop=None, AddToHueAndSaturation=None, 
+                        AdditiveGaussianNoise=None, Sharpen=None, SigmoidContrast=None):
+    if Affine is not None :
+        Affine=parse_affine(**Affine)
+    if Multiply is not None :
+        Multiply=iaa.Multiply(Multiply)
+    if Fliplr is not None :
+        Fliplr=iaa.Fliplr(Fliplr)
+    if Flipud is not None :
+        Flipud=iaa.Flipud(Flipud)
+    if GaussianBlur is not None :
+        GaussianBlur=iaa.GaussianBlur(GaussianBlur)
+    if Crop is not None :
+        Crop=iaa.Crop(Crop)
+    if AddToHueAndSaturation is not None :
+        AddToHueAndSaturation=iaa.AddToHueAndSaturation(AddToHueAndSaturation)
+    if AdditiveGaussianNoise is not None :
+        AdditiveGaussianNoise=iaa.AdditiveGaussianNoise(AdditiveGaussianNoise)
+    if Sharpen is not None :
+        Sharpen=iaa.Sharpen(Sharpen)
+    if SigmoidContrast is not None :
+        SigmoidContrast=iaa.SigmoidContrast(SigmoidContrast)
+    parameters=[Affine, Multiply, Fliplr, Flipud, GaussianBlur, Crop, AddToHueAndSaturation,AdditiveGaussianNoise, Sharpen, SigmoidContrast]
+    augumenters=[aug for aug in parameters if aug is not None]
+    seq = iaa.Sequential(augumenters)
+    return seq
+
+def augument(inputs, seq):
+#     TODO: add width and height of img (change hardcoded values)
+    for idx, points in enumerate(inputs):
+        start=Keypoint(x=points[0], y=points[1])
+        end=Keypoint(x=points[2], y=points[3])
+        image = ia.quokka(size=(1744, 1240))
+
+        image_aug, points_aug = seq(image=image, keypoints=[start,end])
+
+        # cut off endpoints of lines at frame
+        picture_frame = LineString([(0,0),(0,1744),(1240,1744),(1240,0),(0,0)])
+        line = LineString([(points_aug[0].x, points_aug[0].y), (points_aug[1].x, points_aug[1].y)])
+
+        intersects= line.intersection(picture_frame)
+        # replace both startpoint and endpoint
+        if isinstance(intersects, list):
+            points_aug[0].x = intersects[0].x
+            points_aug[0].y = intersects[0].y
+            points_aug[1].x = intersects[1].x
+            points_aug[1].y = intersects[1].y
+        elif isinstance(intersects, Point):
+            # replace startpoint
+            if points_aug[0].x <= 0 or points_aug[0].x >= 1240 or points_aug[0].y <= 0 or points_aug[0].y >= 1744:
+                points_aug[0].x = intersects.x
+                points_aug[0].y = intersects.y
+
+            # replace endpoint
+            else:
+                points_aug[1].x = intersects.x
+                points_aug[1].y = intersects.y
+        inputs[idx]=[points_aug[0].x, points_aug[0].y, points_aug[1].x, points_aug[1].y]
+    return inputs
 
 def find_neighbours(line, card_lines, k_nearest=4):
     shapely_line = LineString([Point(line[0], line[1]), Point(line[2], line[3])])
@@ -76,11 +141,11 @@ def split_to_cards(data_frame):
     
     return (card_starts_indices, card_names)
 
-def preprocess_data(data_frame):
-    startX = data_frame.startX.to_numpy().reshape(-1, 1) / 1200
-    startY = data_frame.startY.to_numpy().reshape(-1, 1) / 1700
-    endX = data_frame.endX.to_numpy().reshape(-1, 1) / 1200
-    endY = data_frame.endY.to_numpy().reshape(-1, 1) / 1700
+def preprocess_data(data_frame, aug=None):
+    startX = data_frame.startX.to_numpy().reshape(-1, 1) 
+    startY = data_frame.startY.to_numpy().reshape(-1, 1) 
+    endX = data_frame.endX.to_numpy().reshape(-1, 1) 
+    endY = data_frame.endY.to_numpy().reshape(-1, 1) 
 
     labels_data = np.array(data_frame.label).reshape(-1, 1)
 
@@ -92,6 +157,14 @@ def preprocess_data(data_frame):
 
     inputs = np.concatenate((startX, startY, endX, endY), axis=1)
     
+    if aug is not None:
+        inputs = augument(inputs, aug)
+        
+    # normalize inputs
+    inputs[..., 0] /= 1200
+    inputs[..., 1] /= 1700
+    inputs[..., 2] /= 1200
+    inputs[..., 3] /= 1700
     return (inputs,oh_labels)
 
 def data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest):
@@ -127,12 +200,12 @@ def get_dataframe(data_path):
     df = pd.DataFrame(data)
     return df
 
-
-def load_data(data_path, k_nearest):
+def load_data(data_path, k_nearest, aug=None):
     df= get_dataframe(data_path)
-    inputs,oh_labels = preprocess_data(df)
+    inputs,oh_labels = preprocess_data(df,aug)
     
     card_starts_indices, _ = split_to_cards(df)
+#     n_of_cards_training = 50 # check if necessary
     graphs = data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest)
     
     return graphs
@@ -214,18 +287,26 @@ def test(data_loader, model):
 
     return loss_acc / batch_items, correct / counter
 
-
 def main():
     print("START")
     args = parse_arguments()
 
+    split_idx = 50
+    
     graphs = load_data(args.data_path, k_nearest=args.k_nearest)
-
+    
     if args.img_path is not None:
         save_graph_imgs(args.img_path, args.data_path)
+    if args.aug is not None:
+        seq_config = json.loads(args.aug)
+        seq= parse_augumentation(**seq_config)
+        graphs_aug = load_data(args.data_path, k_nearest=args.k_nearest, aug=seq)
+        
+        # TODO: def load_data_aug (to ignore train data during processing)
+        train_dataset = graphs[split_idx:] + graphs_aug[split_idx:]
+    else:
+        train_dataset = graphs[split_idx:]
     
-    split_idx = 50
-    train_dataset = graphs[split_idx:]
     test_dataset = graphs[:split_idx]
 
     # Create training and testing DataLoaders
