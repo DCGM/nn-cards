@@ -23,6 +23,7 @@ class CardMeta:
         self.path = None
         self.layout = None
         self.graph = None
+        self.nx_graph = None
         self.labeled_lines = []  # list of (baseline, id, label)
 
         self.name = name
@@ -37,8 +38,9 @@ class CardMeta:
 
     def add_layout(self, layout):
         self.layout = layout
-    def add_graph(self, graph):
+    def add_graphs(self, graph,nxg):
         self.graph = graph
+        self.nx_graph = nxg
     def add_img(self, img):
         self.img = img
 
