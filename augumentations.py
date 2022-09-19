@@ -46,20 +46,20 @@ def parse_augumentation(Affine=None, Multiply=None, Fliplr=None, Flipud=None,
 def augument_img(card, aug, aug_num=1):
     if card.img is not None:
         img = card.img
-        img_shape=img.shape
     else:
-        img_shape= [card.height,card.width]
+        img_shape= (card.height,card.width)
         img=np.zeros(img_shape, np.uint8)
-    graph_x=nx.get_node_attributes(card.graph, "x")
+    graph_x=nx.get_node_attributes(card.graph, "x").values()
 
     kps_list= []
     for idx, points in enumerate(graph_x):
+
         start=Keypoint(x=points[0]*card.width, y=points[1]*card.height)
         end=Keypoint(x=points[2]*card.width, y=points[3]*card.height)
         kps_list.append(start)
         kps_list.append(end)
 
-    kps= KeypointsOnImage(kps_list, img_shape)
+    kps= KeypointsOnImage(kps_list, img.shape)
     augumented_data=[]
     for i in range(aug_num):
         image_aug, points_aug = aug(image=img, keypoints=kps)
