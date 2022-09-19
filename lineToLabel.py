@@ -259,20 +259,20 @@ def visualize(path, cards, idx):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-def load_data_to_cards(json_path,layouts):
+def load_data_to_cards(json_path,layouts, img_path):
     # load json
     cards = parse_json(json_path)
 
     for idx, layout in enumerate(layouts):    # todo make sure that layout is mapped to card
         map_lines_to_labels(layout, cards[idx])  # line.baseline, lineID, label >card
         cards[idx].add_layout(layout)
-        cards[idx].add_path(args.img + cards[idx].name)
+        cards[idx].add_path(img_path + cards[idx].name)
     return cards
 
-def get_layouts(matched_files):
+def get_layouts(matched_files,xml_path):
     layouts = []
     for xml in matched_files:
-        filepath = os.path.join(args.xml + xml + ".xml") # todo check (/+extract) xml-> dir
+        filepath = os.path.join(xml_path + xml + ".xml") # todo check (/+extract) xml-> dir
         layouts.append(PageLayout(5, page_size=(1240, 1744), file=filepath))
     return  layouts
 
@@ -291,8 +291,8 @@ def main():
     if unmatched_xml > 0:
         print("Warning, " + str(unmatched_xml) + " XML files don't have corresponding files in JSON.")
 
-    layouts=get_layouts(matched_files)
-    cards=load_data_to_cards(args.json,layouts)
+    layouts=get_layouts(matched_files,args.xml)
+    cards=load_data_to_cards(args.json,layouts,args.img)
 
     # save results
     for card in cards:
