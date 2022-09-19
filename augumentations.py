@@ -49,7 +49,8 @@ def augument_img(card, aug, aug_num=1):
     else:
         img_shape= (card.height,card.width)
         img=np.zeros(img_shape, np.uint8)
-    graph_x=nx.get_node_attributes(card.graph, "x").values()
+
+    graph_x=nx.get_node_attributes(card.nx_graph, "x").values()
 
     kps_list= []
     for idx, points in enumerate(graph_x):
@@ -68,6 +69,21 @@ def augument_img(card, aug, aug_num=1):
         # todo keypoints -> normalize ?
     return augumented_data
 
+def keypoints_to_array(keypoints_list):
+    arr=np.zeros((len(keypoints_list)//2,4),dtype=float)
+    # split back to np.array
+    for idx, start_point in enumerate(keypoints_list[::2]):
+        end_point = keypoints_list[idx * 2 + 1]
+        arr[idx] = [start_point.x, start_point.y, end_point.x, end_point.y]
+    return arr
+
+def normalize_inputs(inputs,img_shape):
+    inputs[..., 0] /= img_shape[1]
+    inputs[..., 1] /= img_shape[0]
+    inputs[..., 2] /= img_shape[1]
+    inputs[..., 3] /= img_shape[0]
+    return inputs
+
 def augument(inputs, aug, img, aug_num=1, split_index=50):
 #     TODO: add width and height of img (change hardcoded values)
     image = img
@@ -84,19 +100,9 @@ def augument(inputs, aug, img, aug_num=1, split_index=50):
         image_aug, points_aug = aug(image=image, keypoints=kps)
         augumentation_i=np.empty(inputs.shape)
 
-        # split back to np.array
-        for idx, start_point in enumerate(points_aug[split_index::2]):
-            end_point = points_aug[idx *2 +1]
-            augumentation_i[idx]=[start_point.x, start_point.y, end_point.x, end_point.y]
-        print(augumentation_i[0])
+        inputs=normalize_inputs(augumentation_i, image.shape)
 
-        # normalize inputs
-        augumentation_i[..., 0] /= image.shape[1]
-        augumentation_i[..., 1] /= image.shape[0]
-        augumentation_i[..., 2] /= image.shape[1]
-        augumentation_i[..., 3] /= image.shape[0]
-        #TODO: ^ function in train_layout
-        augumented_inputs.append(augumentation_i)
+        augumented_inputs.append(inputs)
 
     return augumented_inputs[0]#todo flatten/ parse in train layout
 
