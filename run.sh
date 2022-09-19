@@ -1,6 +1,7 @@
 
 SCRIPT=./train_layout.py
 DATA=./data/scriptOutput.csv 
+AUG='{"Affine": {"scale": [0.9, 0.65],"rotate": [5,25],"shear": [10,30]}}'
 
 for gcn_layers in 1 2 4
 do
@@ -14,7 +15,7 @@ do
 python -u $SCRIPT --name test -d $DATA \
     --batch-size 24 --learning-rate 0.0002 --max-iteration 50000 \
     --net-config "{\"type\":\"gcn\", \"gcn_layers\":${gcn_layers}, \"gcn_repetitions\":${gcn_repetitions}, \"hidden_dim\":64, \"layer_type\":\"${layer_type}\", \"activation\":\"${activation}\"}" \
-    --aug "{\"Affine\": {\"scale\": [0.8, 0.8],\"rotate\": 15,\"shear\": 20}, \"Multiply\": [1.2, 1.5]}"\
+    --aug $AUG\
     | tee -a log_GCN_${layer_type}_${activation}_d64_l${gcn_layers}_r${gcn_repetitions}.log
 
 done
@@ -27,7 +28,7 @@ for l in $(seq 1 8)
 do
 python -u $SCRIPT --name test -d $DATA \
     --batch-size 16 --learning-rate 0.0002 --max-iteration 50000 \
-    --net-config "{\"type\":\"mlp\", \"depth\":${l}}" | tee -a log_MLP_d64_l${l}.log
+    --net-config "{\"type\":\"mlp\", \"depth\":${l}}"  --aug $AUG | tee -a log_MLP_d64_l${l}.log
 done
 
 

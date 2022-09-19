@@ -8,6 +8,7 @@ import pandas as pd
 import argparse
 import logging
 
+import matplotlib.pyplot as plt
 import cv2
 import networkx as nx
 
@@ -22,7 +23,8 @@ from shapely.geometry import LineString, Point
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, MinMaxScaler, KBinsDiscretizer, FunctionTransformer
 
 from nets import net_factory
-from augumentations import parse_augumentation, augument
+from lineToLabel import CardMeta
+from augumentations import augument_img, normalize_inputs, keypoints_to_array, parse_augumentation, augument
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -44,9 +46,10 @@ def parse_arguments():
                         help="Json network config.")
     parser.add_argument('--optimization-config', default='{"type":"Adam"}')
     parser.add_argument('--k-nearest', default=4, type=int, help="K nearest neighbors when building the graph.")
-    parser.add_argument('--img-path',  type=str, help="Save images with graphs.")
-    parser.add_argument('--aug-num',  type=str, default=1, help="Number of augumented images to generate")
-    parser.add_argument('--aug',  type=str, help="Augumentation config")
+    parser.add_argument('--imgs-list',  type=str, help="List of paths to images to be saved after augumetation.")
+    parser.add_argument('--imgs-dst',  type=str, default="./",  help="Path to save augumented images to.") # "/withGraph"
+    parser.add_argument('--aug-num',  type=int, default=1, help="Number of augumented images to generate.")
+    parser.add_argument('--aug',  type=str, help="Augumentation config.")
 
     args = parser.parse_args()
     return args
@@ -77,7 +80,7 @@ def split_to_cards(data_frame):
 
     return (card_starts_indices, card_names)
 
-def preprocess_data(data_frame, aug=None, aug_num=1, split_index=50):
+def preprocess_data(data_frame):
     startX = data_frame.startX.to_numpy().reshape(-1, 1)
     startY = data_frame.startY.to_numpy().reshape(-1, 1)
     endX = data_frame.endX.to_numpy().reshape(-1, 1)
@@ -93,14 +96,11 @@ def preprocess_data(data_frame, aug=None, aug_num=1, split_index=50):
 
     inputs = np.concatenate((startX, startY, endX, endY), axis=1)
 
-    if aug is not None:
-        inputs = augument(inputs, aug, np.zeros((1744, 1240), np.uint8), aug_num, split_index) #TODO img as last parameter
-    else:
-        # normalize inputs
-        inputs[..., 0] /= 1200
-        inputs[..., 1] /= 1700
-        inputs[..., 2] /= 1200
-        inputs[..., 3] /= 1700
+    # normalize inputs
+    inputs[..., 0] /= 1200
+    inputs[..., 1] /= 1700
+    inputs[..., 2] /= 1200
+    inputs[..., 3] /= 1700
 
     return (inputs,oh_labels)
 
@@ -131,9 +131,24 @@ def data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest):
 
     return graphs
 
+def create_modified_graph(graph, inputs=None, outputs=None, edges=None):
+    if inputs is None:
+        inputs=graph['x']
+    if outputs is None:
+        outputs=graph['y']
+    if edges is None:
+        edges=graph['edge_index']
+    pos = []
+    for idx, center in enumerate(inputs):
+        pos.append(((inputs[idx][0] + inputs[idx][2]) / 2, (inputs[idx][1] + inputs[idx][3]) / 2))
+    pos = torch.tensor(np.array(pos), dtype=torch.float)
+    modified_graph= Data(x=inputs, y=outputs, pos=pos, edge_index=edges)
+    return modified_graph
+
 def get_dataframe(data_path):
     data = pd.read_csv(data_path, converters={'startX': float, 'startY': float,
-                                              'endX': float, 'endY': float})
+                                              'endX': float, 'endY': float,
+                                              'cardHeight': int, 'cardWidth': int})
     df = pd.DataFrame(data)
     return df
 
@@ -143,7 +158,7 @@ def load_data(data_path, k_nearest, aug=None, aug_num=1, n_of_cards_training = 0
 
     card_starts_indices, _ = split_to_cards(df)
 
-    inputs,oh_labels = preprocess_data(df, aug, aug_num=aug_num, split_index=0)
+    inputs,oh_labels = preprocess_data(df)
 
     graphs = data_to_graphs(card_starts_indices, inputs, oh_labels, k_nearest)
 
@@ -151,8 +166,8 @@ def load_data(data_path, k_nearest, aug=None, aug_num=1, n_of_cards_training = 0
 
 def graph_to_image(img, graph, thickness=2, circles=True):
     center_list=nx.get_node_attributes(graph, "pos")
-    lines=[]
-    color=(0, 0, 0)
+
+    color=(255, 0, 0)
 
     for u,v in graph.edges:
         x1= int(np.round(center_list[u][0]*1200))
@@ -178,24 +193,24 @@ def save_graph_img(img, graph, dst_path):
     img = graph_to_image(img, graph, circles=True)
     cv2.imwrite(dst_path, img)
 
-def find_img (cards_path,card_name):
-    if not os.path.exists(os.path.join(cards_path,card_name)):
+def find_img (card_path):
+    if not os.path.exists(os.path.join(card_path)):
         return None
     else:
-        img = cv2.imread(cards_path,card_name)
+        img = cv2.imread(card_path)
         return img
 
 def save_graph_imgs(src_path, card_names, graphs, dst_path):
+    for img_path in src_path:
+        img=find_img(img_path)
+        if img is None:
+            print("IMG "+img_path+ " not found")
+            continue
+
     for card_idx, card in enumerate(card_names):
         graph = to_networkx(graphs[card_idx], node_attrs=["x", "pos"], to_undirected=True)
 
         card_name=os.path.basename(card_names[card_idx][0])
-
-        #TODO: delete src_path (pass imgs as arg)
-        img=find_img(src_path, card_name)
-        if img is None:
-            print("IMG "+card_name+ " not found")
-            continue
 
         # img
         if not os.path.exists(dst_path):
@@ -235,25 +250,77 @@ def test(data_loader, model):
 
     return loss_acc / batch_items, correct / counter
 
+def load_cards(csv_path, k_neighbours=8):
+    graphs = load_data(csv_path, k_neighbours, aug=None, aug_num=1, n_of_cards_training = 0)
+
+    df= get_dataframe(csv_path)
+    heights = df.cardHeight.to_numpy().reshape(-1, 1)
+    widths = df.cardWidth.to_numpy().reshape(-1, 1)
+
+    card_starts_indices,card_names = split_to_cards(df)
+    cards=[]
+    for idx,card_name in enumerate(card_names):
+        df_idx=card_starts_indices[idx]
+
+        card = CardMeta(card_name[0], int(heights[df_idx]), int(widths[df_idx]))
+
+        g = to_networkx(graphs[idx], node_attrs=["x" ,"y", "pos"], to_undirected=True)
+        card.add_graphs(graphs[idx],g)
+
+        cards.append(card)
+    return cards
+
 def main():
     print("START")
     args = parse_arguments()
 
     split_idx = 50
 
+    cards= load_cards(args.data_path, 8)
     graphs = load_data(args.data_path, k_nearest=args.k_nearest)
-
-    if args.img_path is not None:
-        card_names, graphs = get_og_graph_imgs(args.data_path)
-
-        save_graph_imgs(args.img_path, card_names, graphs, os.path.join(args.img_path, "/withGraph"))
     if args.aug is not None:
         seq_config = json.loads(args.aug)
         seq= parse_augumentation(**seq_config)
-        graphs_aug = load_data(args.data_path, k_nearest=args.k_nearest, aug=seq, aug_num=args.aug_num)
 
-        # TODO: def load_data_aug (to ignore train data during processing)
-        train_dataset = graphs[split_idx:] + graphs_aug[split_idx:]
+
+        if args.imgs_list is not None:
+            # get img_names
+            img_names={}
+            if type(args.imgs_list) == list:
+                for card_path in args.imgs_list:
+                    img_names[os.path.basename(card_path)] = card_path
+            else:
+                img_names[os.path.basename(args.imgs_list)] = args.imgs_list
+
+            augumented_graphs = []
+            for idx, card in enumerate(cards):
+                if card.name in img_names:
+                    img = cv2.imread(img_names[card.name])
+                    card.add_img(img)
+
+                augumented_data = augument_img(card, seq, args.aug_num)  # list[(augumented_img, augumented_coords),...]
+
+                counter=0
+                for (augumented_img, augumented_coords) in augumented_data:
+                    if idx >= split_idx:
+                        inputs=keypoints_to_array(augumented_coords)
+                        inputs= normalize_inputs(inputs,(card.height,card.width))
+                        inputs=torch.tensor(np.array(inputs), dtype=torch.float)
+                        aug_graph= create_modified_graph(card.graph, inputs=inputs)
+                        augumented_graphs.append(aug_graph)
+                        if card.img is not None:
+                            if counter==0:
+                                img = graph_to_image(card.img, card.nx_graph)
+                                cv2.imwrite(os.path.join(args.imgs_dst, card.name), img)
+                            aug_g = to_networkx(aug_graph, node_attrs=["x" , "pos"], to_undirected=True)
+
+                            img = graph_to_image(augumented_img, aug_g)
+                            dst_path=os.path.join(args.imgs_dst, str(counter)+ card.name)
+
+                            cv2.imwrite(dst_path, img)
+                            counter += 1
+
+        train_dataset = graphs[split_idx:] + augumented_graphs
     else:
         train_dataset = graphs[split_idx:]
 
@@ -328,7 +395,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
