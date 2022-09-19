@@ -4,9 +4,12 @@
 import logging
 
 # import imgaug as ia
+import networkx as nx
 import numpy as np
 import imgaug.augmenters as iaa
+
 from imgaug.augmentables import Keypoint, KeypointsOnImage
+# from lineToLabel import CardMeta
 
 def parse_affine(scale=None, translate_percent=None, translate_px=None, rotate=None, shear=None):
     affine_res=iaa.Affine(scale=scale, translate_percent=translate_percent, translate_px=translate_px, rotate=rotate, shear=shear)
@@ -40,6 +43,30 @@ def parse_augumentation(Affine=None, Multiply=None, Fliplr=None, Flipud=None,
     seq = iaa.Sequential(augumenters)
     return seq
 
+def augument_img(card, aug, aug_num=1):
+    if card.img is not None:
+        img = card.img
+        img_shape=img.shape
+    else:
+        img_shape= [card.height,card.width]
+        img=np.zeros(img_shape, np.uint8)
+    graph_x=nx.get_node_attributes(card.graph, "x")
+
+    kps_list= []
+    for idx, points in enumerate(graph_x):
+        start=Keypoint(x=points[0]*card.width, y=points[1]*card.height)
+        end=Keypoint(x=points[2]*card.width, y=points[3]*card.height)
+        kps_list.append(start)
+        kps_list.append(end)
+
+    kps= KeypointsOnImage(kps_list, img_shape)
+    augumented_data=[]
+    for i in range(aug_num):
+        image_aug, points_aug = aug(image=img, keypoints=kps)
+        augumented_data.append((image_aug, points_aug))
+        # todo keypoints -> np.array
+        # todo keypoints -> normalize ?
+    return augumented_data
 
 def augument(inputs, aug, img, aug_num=1, split_index=50):
 #     TODO: add width and height of img (change hardcoded values)
@@ -56,15 +83,18 @@ def augument(inputs, aug, img, aug_num=1, split_index=50):
     for i in range(aug_num):
         image_aug, points_aug = aug(image=image, keypoints=kps)
         augumentation_i=np.empty(inputs.shape)
+
+        # split back to np.array
         for idx, start_point in enumerate(points_aug[split_index::2]):
             end_point = points_aug[idx *2 +1]
             augumentation_i[idx]=[start_point.x, start_point.y, end_point.x, end_point.y]
         print(augumentation_i[0])
+
         # normalize inputs
-        augumentation_i[..., 0] /= 1200
-        augumentation_i[..., 1] /= 1700
-        augumentation_i[..., 2] /= 1200
-        augumentation_i[..., 3] /= 1700
+        augumentation_i[..., 0] /= image.shape[1]
+        augumentation_i[..., 1] /= image.shape[0]
+        augumentation_i[..., 2] /= image.shape[1]
+        augumentation_i[..., 3] /= image.shape[0]
         #TODO: ^ function in train_layout
         augumented_inputs.append(augumentation_i)
 
