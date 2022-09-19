@@ -18,8 +18,8 @@ from pero_ocr.document_ocr.page_parser import PageParser
 
 
 class CardMeta:
-    def __init__(self, name, card_id, height, width, polygons):
-        # self.img = None
+    def __init__(self, name,  height, width, card_id="", polygons=None):
+        self.img = None
         self.path = None
         self.layout = None
         self.labeled_lines = []  # list of (baseline, id, label)
@@ -232,7 +232,7 @@ def parse_json(json_file_path):
             polygon = Polygon(coords)
             polygons.append((label, polygon))
 
-        card = CardMeta(name, card["id"], height, width, polygons)
+        card = CardMeta(name, height, width, card_id=card["id"], polygons=polygons)
         cards.append(card)
     return cards
 
@@ -256,9 +256,26 @@ def visualize(path, cards, idx):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+def load_data_to_cards(json_path,layouts):
+    # load json
+    cards = parse_json(json_path)
+
+    for idx, layout in enumerate(layouts):    # todo make sure that layout is mapped to card
+        map_lines_to_labels(layout, cards[idx])  # line.baseline, lineID, label >card
+        cards[idx].add_layout(layout)
+        cards[idx].add_path(args.img + cards[idx].name)
+    return cards
+
+def get_layouts(matched_files):
+    layouts = []
+    for xml in matched_files:
+        filepath = os.path.join(args.xml + xml + ".xml") # todo check (/+extract) xml-> dir
+        layouts.append(PageLayout(5, page_size=(1240, 1744), file=filepath))
+    return  layouts
+
+
 def main():
     results = []
-    layouts = []
 
     # initialize parameters
     args = parse_arguments()
@@ -271,17 +288,8 @@ def main():
     if unmatched_xml > 0:
         print("Warning, " + str(unmatched_xml) + " XML files don't have corresponding files in JSON.")
 
-    for xml in matched_files:
-        filepath = args.xml + xml + ".xml"  # todo check (/+extract) xml-> dir
-        layouts.append(PageLayout(5, page_size=(1240, 1744), file=filepath))
-
-    # load json
-    cards = parse_json(args.json)
-
-    for idx, layout in enumerate(layouts):    # todo make sure that layout is mapped to card
-        map_lines_to_labels(layout, cards[idx])  # line.baseline, lineID, label >card
-        cards[idx].add_layout(layout)
-        cards[idx].add_path(args.img + cards[idx].name)
+    layouts=get_layouts(matched_files)
+    cards=load_data_to_cards(args.json,layouts)
 
     # save results
     for card in cards:
