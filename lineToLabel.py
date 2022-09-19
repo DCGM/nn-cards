@@ -55,7 +55,7 @@ class CardMeta:
                       "Died": (255, 111, 145),
                       "Buried-date": (255, 150, 113),
                       "Buried-place": (255, 199, 95),
-                      "Grave position": (249, 248, 113),
+                      "Grave-position": (249, 248, 113),
                       "Source-place": (0, 201, 167),
                       "Source-book": (31, 46, 126)}
 
@@ -87,7 +87,7 @@ class CardMeta:
 def save_result(results, out_name):
     with open(out_name + '.csv', 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(("lineID", "label", "cardName", "startX", "startY", "endX", "endY", "lineNumber"))
+        writer.writerow(("lineID", "label", "cardName", "startX", "startY", "endX", "endY", "cardHeight", "cardWidth"))
         for row in results:
             writer.writerow(row)
 
@@ -297,11 +297,12 @@ def main():
     # save results
     for card in cards:
         # csv
+        size=[card.height, card.width]
         for line in card.labeled_lines:
             baseline = line[0]
             coords = [baseline[0][0], baseline[0][1], baseline[-1][0], baseline[-1][1]]  # x1, y1, xN, yN
             features = [line[1], line[2], card.name]  # lineID, label, cardName,
-            results.append((features + coords))
+            results.append((features + coords + size))
         # img
         if not os.path.exists(args.img + "/labeled"):
             os.makedirs(args.img + "/labeled")
