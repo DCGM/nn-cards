@@ -39,6 +39,8 @@ class CardMeta:
         self.layout = layout
     def add_graph(self, graph):
         self.graph = graph
+    def add_img(self, img):
+        self.img = img
 
     def add_path(self, path):
         self.path = path
