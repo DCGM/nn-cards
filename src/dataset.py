@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from .graphbuilders import graph_builder_factory
 
 class GraphDataset(Dataset):
-    def __init__(self, csv_path: Path, graph_build_config=None):
+    def __init__(self, csv_path: Path, graph_build_config):
         if isinstance(csv_path, str):
             csv_path = Path(csv_path)
         

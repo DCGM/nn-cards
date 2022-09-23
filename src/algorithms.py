@@ -14,7 +14,6 @@ def k_nearest_neighbours(points, k) -> tuple[np.ndarray, np.ndarray]:
     # (a1-b1)**2 + (a2-b2)**2 = a1**2 + a2**2 - 2*(a1*b1 + a2*b2) + b1**2 + b2**2
     squared = np.sum(points**2, axis=1)
     distance_matrix = squared - 2*points@points.T + squared.reshape(-1, 1)
-    print(distance_matrix)
     indices = np.argsort(distance_matrix, axis=1)
     distances = np.sort(distance_matrix, axis=1)
     return indices[:, 1:k+1], distances[:, 1:k+1]

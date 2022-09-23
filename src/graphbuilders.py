@@ -1,18 +1,27 @@
 # author: Pavel Ševčík
 
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
 
 from .algorithms import k_nearest_neighbours
 
-def graph_builder_factory(graph_build_config):
-    raise NotImplementedError()
-
 class GraphBuilder(ABC):
     @abstractmethod
     def build_graph(self, node_coords: np.ndarray) -> np.ndarray:
         """When overriden in a subclass the method should return an edge matrix of the graph"""
+
+def graph_builder_factory(graph_build_config) -> GraphBuilder:
+    """Returns a graph builder that is reponsible for creating a graph from a set of nodes"""
+    builder_type = graph_build_config["type"].lower()
+    del graph_build_config["type"]
+    if builder_type == "knearest":
+        return KNearestGraphBuilder(**graph_build_config)
+    else:
+        msg = f"Unknown graph buider type '{builder_type}'"
+        logging.error(msg)
+        raise ValueError(msg)
 
 
 class KNearestGraphBuilder(GraphBuilder):
