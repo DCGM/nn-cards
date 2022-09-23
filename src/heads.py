@@ -1,7 +1,6 @@
 # author: Pavel Ševčík
 
 from abc import ABC, abstractmethod
-from turtle import forward
 from typing import Dict, List
 
 import torch
@@ -40,12 +39,12 @@ class ClassificationHead(torch.nn.Module, Head):
         loss = self.criterion(x, label)
         return {self.name: loss}
 
-class NodeClassificationHead(torch.nn.Module, Head):
+class NodeClassificationHead(ClassificationHead):
     def forward(self, batch):
         x = self.net(batch.x)
         return x
 
-class CosEdgeClassificationHead(torch.nn.Module, Head):
+class CosEdgeClassificationHead(ClassificationHead):
     def forward(self, batch):
         x, edge_index = batch.x, batch.edge_index
         x = self.net(x)
