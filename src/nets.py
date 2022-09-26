@@ -8,19 +8,24 @@ from torch_geometric.nn import GCNConv
 import torch_geometric
 
 
-def net_factory(config, input_dim, output_dim):
-    net_type = config['type'].lower()
-    del config['type']
+def net_factory(config):
+    net_type = config["type"].lower()
+    del config["type"]
     net = None
-    if net_type == 'mlp':
-        return MLP(input_dim, output_dim, **config)
-    elif net_type == 'gcn':
-        return GCN(input_dim, output_dim, **config)
+    if net_type == "mlp":
+        return MLP(**config)
+    elif net_type == "gcn":
+        return GCN(**config)
+    elif net_type == "null":
+        return NullNet()
     else:
-        logging.error(f'Unknown network type "{net_type}".')
+        msg = f"Unknown network type '{net_type}'."
+        logging.error(msg)
+        raise ValueError(msg)
 
-    return net
-
+class NullNet(torch.nn.Module):
+    def forward(self, batch):
+        return batch.x
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
@@ -39,7 +44,7 @@ class MLP(torch.nn.Module):
 
 
 class GCN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type='GatedGraphConv', activation=None):
+    def __init__(self, input_dim, output_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
         super().__init__()
         self.layer_type = layer_type.lower()
         self.input_mlp = torch.nn.Sequential(
@@ -47,12 +52,12 @@ class GCN(torch.nn.Module):
             torch.nn.ReLU())
         self.gcn_repetitions = gcn_repetitions
 
-        if activation is None or activation.lower() == 'none':
+        if activation is None or activation.lower() == "none":
             self.gcn_activation = None
-        elif activation.lower() == 'relu':
+        elif activation.lower() == "relu":
             self.gcn_activation = F.relu
         else:
-            logging.error(f'Unknown activation "{activation}".')
+            logging.error(f"Unknown activation '{activation}'.")
             exit(-1)
 
         if self.layer_type == "GatedGraphConv".lower():
@@ -63,7 +68,7 @@ class GCN(torch.nn.Module):
             self.gcn = torch.nn.ModuleList(
                 [torch_geometric.nn.GraphConv(hidden_dim, hidden_dim) for i in range(gcn_layers)])
         else:
-            logging.error(f'Unknown graph layer "{layer_type}".')
+            logging.error(f"Unknown graph layer '{layer_type}'.")
             exit(-1)
 
         self.output = torch.nn.Linear(hidden_dim, output_dim)

@@ -1,0 +1,12 @@
+[
+    {
+        "type": "add_pos"
+    },
+    {
+        "type": "knn",
+        "k": 4
+    },
+    {
+        "type": "label_pred_init"
+    }
+]

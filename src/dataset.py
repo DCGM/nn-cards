@@ -1,4 +1,5 @@
-# author: Pavel Ševčík
+# file dataset.py
+# author Pavel Ševčík
 
 from pathlib import Path
 from dataclasses import dataclass
@@ -39,7 +40,8 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, index):
         card = self.cards[index]
-        data = self.transform(self._card_to_data(card))
+        data = self._card_to_data(card)
+        data = self.transform(data)
         return data
 
     def _card_to_data(self, card: Card) -> Data:
@@ -64,7 +66,7 @@ class GraphDataset(Dataset):
         data = pd.read_csv(csv_path, converters=convertors)
         cards = []
         for (name, width, height), lines in data.groupby(by=["cardName", "cardWidth", "cardHeight"]):
-            lines = [Line(line["label"], line["startX"], line["endX"], line["startY"], line["endY"]) for line in lines]
+            lines = [Line(label, x1, x2, y1, y2) for label, x1, x2, y1, y2 in zip(lines["label"], lines["startX"], lines["endX"], lines["startY"], lines["endY"])]
             cards.append(Card(name, width, height, lines))
         
         return cards
@@ -74,11 +76,10 @@ class GraphDataset(Dataset):
         n_labels = len(all_labels)
 
         def encode(labels):
-            labels = [all_labels.index(label) for label in labels]
-            return torch.nn.functional.one_hot(labels, num_classes=n_labels)
+            labels = torch.LongTensor([all_labels.index(label) for label in labels])
+            return torch.nn.functional.one_hot(labels, num_classes=n_labels).float()
         return encode
             
-        
         
 
 

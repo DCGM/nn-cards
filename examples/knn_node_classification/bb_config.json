@@ -1,0 +1,10 @@
+{
+    "type": "gcn",
+    "gcn_layers": 1,
+    "gcn_repetitions": 1,
+    "hidden_dim": 64,
+    "layer_type": "GatedGraphConv",
+    "activation": "None",
+    "input_dim": 4,
+    "output_dim": 11
+}

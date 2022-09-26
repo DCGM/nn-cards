@@ -1,5 +1,6 @@
 # author: Pavel Ševčík
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
@@ -18,7 +19,16 @@ class Head(ABC):
 
 def head_factory(head_config) -> List[Head]:
     """Returns a list of heads according to the configuration"""
-    raise NotImplementedError()
+    type = head_config["type"]
+    del head_config["type"]
+    if type == "node_cls":
+        return NodeClassificationHead(**head_config)
+    elif type == "cos_edge_cls":
+        return CosEdgeClassificationHead(**head_config)
+    else:
+        msg = f"Unknown head type '{type}'."
+        logging.error(msg)
+        raise ValueError(msg)
 
 class ClassificationHead(torch.nn.Module, Head):
     def __init__(self, name, net_config):
@@ -41,13 +51,13 @@ class ClassificationHead(torch.nn.Module, Head):
 
 class NodeClassificationHead(ClassificationHead):
     def forward(self, batch):
-        x = self.net(batch.x)
+        x = self.net(batch)
         return x
 
 class CosEdgeClassificationHead(ClassificationHead):
     def forward(self, batch):
         x, edge_index = batch.x, batch.edge_index
-        x = self.net(x)
+        x = self.net(batch)
 
         src, dst = edge_index
         score = torch.sum(x[src] * x[dst], dim=-1)
