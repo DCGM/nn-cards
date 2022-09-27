@@ -1,0 +1,13 @@
+{
+    "graph_features": [
+        "cardName", "cardHeight", "cardWidth"
+    ],
+    "edge_build": {
+        "type": "knn_rectangle_center",
+        "k": 4,
+        "rectangle_coords": [
+            [ "startX", "endX" ],
+            [ "startY", "endY" ]
+        ]
+    }
+}

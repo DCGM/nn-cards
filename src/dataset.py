@@ -10,39 +10,44 @@ import pandas as pd
 from torch_geometric.data import Data
 from torch.utils.data import Dataset
 
-@dataclass
-class Line:
-    label: str
-    x1: float
-    x2: float
-    y1: float
-    y2: float
-
-@dataclass
-class Card:
-    name: str
-    width: int
-    height: int
-    lines: List[Line]
-
 class GraphDataset(Dataset):
-    def __init__(self, csv_path: Path, transform):
+    def __init__(self, csv_path: Path, data_config, attribute_build):
         if isinstance(csv_path, str):
             csv_path = Path(csv_path)
         
         self.csv_path = csv_path
-        self.cards = self._load_cards(csv_path)
-        self.label_encoder = self._get_label_encoder(self.cards)
-        self.transform = transform
+        self.attribute_build = attribute_build
+
+        graph_features = data_config["graph_features"]
+        self.graphs = self._load_graphs(csv_path, graph_features)
+
+        self.edge_build_transform = self._get_edge_build_transform(data_config["edge_build"])
 
     def __len__(self):
-        return len(self.cards)
+        return len(self.graphs)
 
     def __getitem__(self, index):
-        card = self.cards[index]
-        data = self._card_to_data(card)
-        data = self.transform(data)
+        graph = self.graphs[index]
+        data = self.edge_build_transform(graph)
+        data = self.attribute_build(data, graph)
         return data
+
+    def _load_graphs(self, csv_path: Path, graph_features: List[str]):
+        csv_data = pd.read_csv(csv_path)
+        graphs = []
+        for graph_features_values, node_features_values in csv_data.groupby(graph_features):
+            graph = {
+                feature: feature_value
+                for feature, feature_value in zip(graph_features, graph_features_values)
+            }
+            graph.nodes = [
+                {
+                    feature: feature_value
+                    for feature, feature_value in node_features_values.iterrows()
+                }
+            ]
+            graphs.append(graph)
+            
 
     def _card_to_data(self, card: Card) -> Data:
         x1 = torch.tensor([line.x1 for line in card.lines])

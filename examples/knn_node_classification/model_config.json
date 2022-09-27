@@ -1,0 +1,29 @@
+{
+    "input": {
+        "type": "vector",
+        "dims": [ "startX", "endX", "startY", "endY" ]
+    },
+    "backbone": {
+        "type": "gcn",
+        "gcn_layers": 1,
+        "gcn_repetitions": 1,
+        "hidden_dim": 64,
+        "layer_type": "GatedGraphConv",
+        "activation": "None",
+        "input_dim": 4,
+        "output_dim": 11
+    },
+    "heads": [
+        {
+            "type": "node_cls",
+            "name": "label_pred",
+            "net_config": {
+                "type": "null",
+                "hidden_dim": 128,
+                "depth": 4,
+                "input_dim": 11,
+                "output_dim": 11
+            }
+        }
+    ]
+}
