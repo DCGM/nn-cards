@@ -1,7 +1,7 @@
 {
     "input": {
         "type": "vector",
-        "dims": [ "startX", "endX", "startY", "endY" ]
+        "fields": [ "startX", "endX", "startY", "endY" ]
     },
     "backbone": {
         "type": "gcn",
@@ -16,7 +16,20 @@
     "heads": [
         {
             "type": "node_cls",
-            "name": "label_pred",
+            "field": "label",
+            "classes": [
+                "Name",
+                "None",
+                "Rank",
+                "Birth",
+                "Nationality",
+                "Died",
+                "Buried-date",
+                "Buried-place",
+                "Source-place",
+                "Source-book",
+                "Grave position"
+            ],
             "net_config": {
                 "type": "null",
                 "hidden_dim": 128,

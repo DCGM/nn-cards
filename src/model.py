@@ -9,18 +9,12 @@ import torch
 from .nets import net_factory
 from .heads import Head, head_factory
 
-def model_factory(backbone_config, head_config):
+def model_factory(config):
+    backbone_config = config["backbone"]
+    head_config = config["heads"]
     backbone = net_factory(backbone_config)
-    model_type = head_config["type"]
-    del head_config["type"]
-    if model_type == "multihead":
-        heads = [head_factory(cfg) for cfg in head_config["heads"]]
-        del head_config["heads"]
-        return MultiHeadModel(backbone, heads, **head_config)
-    else:
-        msg = f"Unknown model type '{model_type}'."
-        logging.error(msg)
-        raise ValueError(msg)
+    heads = [head_factory(cfg) for cfg in head_config]
+    return MultiHeadModel(backbone, heads)
 
 class MultiHeadModel(torch.nn.Module):
     def __init__(self, backbone, heads: List[Head]):

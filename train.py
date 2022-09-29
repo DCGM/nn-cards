@@ -16,11 +16,15 @@ from torch_geometric.loader import DataLoader
 from src.dataset import GraphDataset
 from src.graphbuilders import graph_builder_factory
 from src.model import model_factory
-from src.utils import Stats
+from src.utils import Stats, json_str_or_path
 
 def parse_arguments():
     parser = ArgumentParser()
     parser.add_argument("-d", "--data-path", type=Path, help="Path to the csv data file", required=True)
+    parser.add_argument("--model-config", type=json_str_or_path,
+                        help="Json string or path to a json file containing model config.", required=True)
+    parser.add_argument("--data-config", type=json_str_or_path,
+                        help="Json string or path to a json file containing data config.", required=True)
     parser.add_argument("--start-iteration", default=0, type=int)
     parser.add_argument("--max-iterations", default=50000, type=int)
     parser.add_argument("--view-step", default=1000, type=int)
@@ -29,10 +33,6 @@ def parse_arguments():
     parser.add_argument("--checkpoint-dir", default=Path("."), type=Path)
     parser.add_argument("--batch-size", default=32, type=int, help="Batch size.")
     parser.add_argument("--learning-rate", type=float, default=0.0002, help="Learning rate for ADAM.")
-    parser.add_argument("--graph-build-config", help="Json graph build config.", required=True)
-    parser.add_argument("--backbone-config", help="Json network config.", required=True)
-    parser.add_argument("--head-config", help="Json head config.", required=True)
-    parser.add_argument("--optimization-config", help="Json optimization config", required=True)
     parser.add_argument("--device", type=torch.device, help="The device to train on", default=torch.device("cuda"))
 
     args = parser.parse_args()

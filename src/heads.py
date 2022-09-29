@@ -7,15 +7,15 @@ from typing import Dict, List
 import torch
 
 from .nets import net_factory
+from .dataset import DataBuilder, NullDataBuild, AddOneHotAttr
 
-class Head(ABC):
-    @abstractmethod
-    def forward(self, batch):
-        pass
-
+class Head(torch.nn.Module, ABC):
     @abstractmethod
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
         pass
+
+    def get_data_build(self) -> DataBuilder:
+        return NullDataBuild()
 
 def head_factory(head_config) -> List[Head]:
     """Returns a list of heads according to the configuration"""
@@ -30,24 +30,28 @@ def head_factory(head_config) -> List[Head]:
         logging.error(msg)
         raise ValueError(msg)
 
-class ClassificationHead(torch.nn.Module, Head):
-    def __init__(self, name, net_config):
+class ClassificationHead( Head):
+    def __init__(self, field, net_config, classes):
         super().__init__()
-        self.name = name
+        self.field = field
         self.net = net_factory(net_config)
+        self.classes = classes
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
         x = self(batch)
 
-        label = getattr(batch, self.name)
-        mask = getattr(batch, f"{self.name}_mask", None)
+        label = getattr(batch, self.field)
+        mask = getattr(batch, f"{self.field}_mask", None)
         if mask:
             x = x[mask]
             label = label[mask]
         
         loss = self.criterion(x, label)
-        return {self.name: loss}
+        return {self.field: loss}
+    
+    def get_data_build(self) -> DataBuilder:
+        return AddOneHotAttr(self.field, self.field, self.classes)
 
 class NodeClassificationHead(ClassificationHead):
     def forward(self, batch):

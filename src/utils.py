@@ -1,5 +1,6 @@
 # author: Pavel Ševčík
 
+import json
 from collections import defaultdict
 from typing import Dict
 
@@ -15,3 +16,12 @@ class Stats:
     def clear(self):
         for value in self.data.values():
             value.clear()
+
+def json_str_or_path(s):
+    try:
+        value = json.loads(s)
+        return value
+    except ValueError:
+        pass
+    with open(s) as f:
+        return json.load(f)
