@@ -7,14 +7,14 @@ from typing import Dict, List
 import torch
 
 from .nets import net_factory
-from .dataset import DataBuilder, NullDataBuild, AddOneHotAttr
+from .dataset import DataBuild, NullDataBuild, AddOneHotAttr
 
 class Head(torch.nn.Module, ABC):
     @abstractmethod
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
         pass
 
-    def get_data_build(self) -> DataBuilder:
+    def get_data_build(self) -> DataBuild:
         return NullDataBuild()
 
 def head_factory(head_config) -> List[Head]:
@@ -50,7 +50,7 @@ class ClassificationHead( Head):
         loss = self.criterion(x, label)
         return {self.field: loss}
     
-    def get_data_build(self) -> DataBuilder:
+    def get_data_build(self) -> DataBuild:
         return AddOneHotAttr(self.field, self.field, self.classes)
 
 class NodeClassificationHead(ClassificationHead):

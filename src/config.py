@@ -17,8 +17,9 @@ class Config:
         """Returns a function that takes csv_path as a single argument and a configured model"""
         model = model_factory(model_config)
         data_build = self._get_data_build(model_config, model)
-        graph_build = self._get_graph_build(data_config)
+        graph_build = self._get_graph_build(data_config["graph_build"])
         kwargs = {
+            "graph_features": data_config["graph_features"],
             "data_build": data_build,
             "graph_build": graph_build
         }
@@ -27,7 +28,7 @@ class Config:
 
     def _get_graph_build(self, config):
         type = config["type"].lower()
-        del type
+        del config["type"]
         if type == "knn_rectangle_center":
             return KnnRectangeCenterBuild(**config)
         else:

@@ -30,18 +30,18 @@ class NullDataBuild(DataBuild):
         return data
 
 class KnnRectangeCenterBuild(GraphBuild):
-    def __init__(self, k, rectange_coords, leave_pos_attr=False, num_workers=0):
-        self.rectange_coords = rectange_coords
+    def __init__(self, k, rectangle_coords, leave_pos_attr=False, num_workers=0):
+        self.rectange_coords = rectangle_coords
         self.leave_pos_attr = leave_pos_attr
         self.knn_transform = KNNGraph(k=k, num_workers=num_workers)
     
     def __call__(self, graph) -> Data:
         to_tensor = functools.partial(torch.tensor, dtype=torch.float)
         pos = torch.stack(
-            (
-                (to_tensor(graph.nodes[start]) + to_tensor(graph.nodes[end])) * 0.5
+            [
+                (to_tensor(graph["nodes"][start].to_numpy()) + to_tensor(graph["nodes"][end].to_numpy())) * 0.5
                     for start, end in self.rectange_coords
-            ), dim=1
+            ], dim=1
         )
         data = Data(pos=pos)
         data = self.knn_transform(data)
@@ -66,19 +66,19 @@ class AddVectorAttr(DataBuild):
     def __call__(self, data: Data, graph) -> Data:
         to_tensor = functools.partial(torch.tensor, dtype=torch.float)
         attr_value = torch.stack(
-            (to_tensor(graph.nodes[field]) for field in self.fields), dim=1
+            [to_tensor(graph["nodes"][field].to_numpy()) for field in self.fields], dim=1
         )
         setattr(data, self.attr_name, attr_value)
         return data
 
 class AddOneHotAttr(DataBuild):
     def __init__(self, attr_name: str, field: str, classes: List[str]):
-        self.attr_name = attr_name,
+        self.attr_name = attr_name
         self.field = field
         self.classes = classes
 
     def __call__(self, data: Data, graph) -> Data:
-        field_value = graph.nodes[self.field]
+        field_value = graph["nodes"][self.field]
         indices = torch.tensor([
             self.classes.index(item) for item in field_value
         ], dtype=torch.long)
@@ -117,6 +117,6 @@ class GraphDataset(Dataset):
                 feature: feature_value
                 for feature, feature_value in zip(graph_features, graph_features_values)
             }
-            graph.nodes = node_features_values
+            graph["nodes"] = node_features_values
             graphs.append(graph)
         return graphs

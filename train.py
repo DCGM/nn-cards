@@ -13,10 +13,8 @@ import torch
 import tqdm
 from torch_geometric.loader import DataLoader
 
-from src.dataset import GraphDataset
-from src.graphbuilders import graph_builder_factory
-from src.model import model_factory
 from src.utils import Stats, json_str_or_path
+from src.config import Config
 
 def parse_arguments():
     parser = ArgumentParser()
@@ -25,6 +23,8 @@ def parse_arguments():
                         help="Json string or path to a json file containing model config.", required=True)
     parser.add_argument("--data-config", type=json_str_or_path,
                         help="Json string or path to a json file containing data config.", required=True)
+    parser.add_argument("--opt-config", type=json_str_or_path,
+                        help="Json string or path to a json file containing optimization config.", required=True)
     parser.add_argument("--start-iteration", default=0, type=int)
     parser.add_argument("--max-iterations", default=50000, type=int)
     parser.add_argument("--view-step", default=1000, type=int)
@@ -34,14 +34,13 @@ def parse_arguments():
     parser.add_argument("--batch-size", default=32, type=int, help="Batch size.")
     parser.add_argument("--learning-rate", type=float, default=0.0002, help="Learning rate for ADAM.")
     parser.add_argument("--device", type=torch.device, help="The device to train on", default=torch.device("cuda"))
-
+    parser.add_argument("--dataloader-num-workers", type=int, default=0)
     args = parser.parse_args()
     return args
 
-def dataloaders_factory(data_path, batch_size, graph_build_config):
-    dataset = GraphDataset(data_path, graph_builder_factory(graph_build_config))
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=0)
-    return dataloader, None
+def dataloader_factory(dataset, batch_size, num_workers):
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers)
+    return dataloader
 
 def continuous_iterator(iterable):
     """Returns continuous iterator
@@ -70,10 +69,6 @@ def optimizer_factory(model, optimization_config):
 def evaluate(dataloader_val, model):
     model.eval()
 
-def load_json_file(filename):
-    with open(filename) as f:
-        return json.load(f)
-
 def log_progress(statistics: Stats, step: int, timespan):
         """Log the current progress
 
@@ -87,14 +82,12 @@ def main():
     args = parse_arguments()
     logging.info("Initializing...")
 
-    graph_build_config = load_json_file(args.graph_build_config)
-    optimization_config = load_json_file(args.optimization_config)
-    backbone_config = load_json_file(args.backbone_config)
-    head_config = load_json_file(args.head_config)
+    config = Config()
+    dataset_factory, model = config.configure(args.data_config, args.model_config)
+    dataset_train = dataset_factory(args.data_path)
 
-    dataloader_train, dataloader_val = dataloaders_factory(args.data_path, args.batch_size, graph_build_config)
-
-    model = model_factory(backbone_config, head_config)
+    dataloader_train = dataloader_factory(dataset_train, args.batch_size, args.dataloader_num_workers)
+    dataloader_val = None # TODO
 
     checkpoint_path = None
     if args.in_checkpoint:
@@ -108,8 +101,9 @@ def main():
     model.train()
     model.to(args.device)
 
-    optimizer = optimizer_factory(model, optimization_config)
+    optimizer = optimizer_factory(model, args.opt_config)
 
+    logging.info(f"Model: {model}")
     logging.info("Training...")
     stats = Stats()
     train_iterator = continuous_iterator(dataloader_train)
