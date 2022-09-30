@@ -14,8 +14,13 @@ class Head(torch.nn.Module, ABC):
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
         pass
 
+    @abstractmethod
+    def evaluate(self, batches) -> Dict[str, torch.Tensor]:
+        pass
+
     def get_data_build(self) -> DataBuild:
         return NullDataBuild()
+    
 
 def head_factory(head_config) -> List[Head]:
     """Returns a list of heads according to the configuration"""
@@ -52,6 +57,26 @@ class ClassificationHead( Head):
     
     def get_data_build(self) -> DataBuild:
         return AddOneHotAttr(self.field, self.field, self.classes)
+
+    def evaluate(self, batches) -> Dict[str, torch.Tensor]:
+        losses = []
+        correct = torch.tensor(0)
+
+        for batch in batches:
+            x = self(batch)
+
+            label = getattr(batch, self.field)
+            mask = getattr(batch, f"{self.field}_mask", None)
+            if mask:
+                x = x[mask]
+                label = label[mask]
+            
+            loss = self.criterion(x, label)
+            pred_label = torch.argmax(x, dim=1)
+
+            correct += ((pred_label == label) * mask).sum().item()
+
+
 
 class NodeClassificationHead(ClassificationHead):
     def forward(self, batch):

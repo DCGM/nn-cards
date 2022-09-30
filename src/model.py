@@ -38,5 +38,7 @@ class MultiHeadModel(torch.nn.Module):
         total_loss.backward()
     
     def evaluate(self, dataloader_val) -> Dict[str, float]:
-        # TODO
-        return {}
+        with torch.no_grad():
+            evaluation = (head.evaluate((self.backbone(batch) for batch in dataloader_val))
+                          for head in self.heads)
+            return functools.reduce(lambda x, y: {**x, **y}, evaluation, {})
