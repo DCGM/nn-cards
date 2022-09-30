@@ -7,13 +7,16 @@ from typing import Dict, List
 import torch
 
 from .nets import net_factory
-from .heads import Head, head_factory
+from .heads import Head, HeadFactory
 
 def model_factory(config):
     backbone_config = config["backbone"]
     head_config = config["heads"]
     backbone = net_factory(backbone_config)
+    head_input_dim = backbone_config["output_dim"]
+    head_factory = HeadFactory(head_input_dim)
     heads = [head_factory(cfg) for cfg in head_config]
+    
     return MultiHeadModel(backbone, heads)
 
 class MultiHeadModel(torch.nn.Module):
@@ -23,12 +26,11 @@ class MultiHeadModel(torch.nn.Module):
         self.heads = torch.nn.ModuleList(heads)
 
     def forward(self, batch):
-        x = self.backbone(batch)
-        return {head.name: head(x) for head in self.heads}
+        batch = self.backbone(batch)
+        return {head.name: head(batch) for head in self.heads}
 
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
-        x = self.backbone(batch)
-        batch.x = x
+        batch = self.backbone(batch)
         losses = (head.compute_loss(batch) for head in self.heads)
         return functools.reduce(lambda x, y: {**x, **y}, losses, {})
     
@@ -39,6 +41,6 @@ class MultiHeadModel(torch.nn.Module):
     
     def evaluate(self, dataloader_val) -> Dict[str, float]:
         with torch.no_grad():
-            evaluation = (head.evaluate((self.backbone(batch) for batch in dataloader_val))
+            evaluation = (head.evaluate((self.backbone(batch.to(next(self.parameters()).device)) for batch in dataloader_val))
                           for head in self.heads)
             return functools.reduce(lambda x, y: {**x, **y}, evaluation, {})

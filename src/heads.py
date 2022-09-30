@@ -21,30 +21,37 @@ class Head(torch.nn.Module, ABC):
     def get_data_build(self) -> DataBuild:
         return NullDataBuild()
     
-
-def head_factory(head_config) -> List[Head]:
-    """Returns a list of heads according to the configuration"""
-    type = head_config["type"]
-    del head_config["type"]
-    if type == "node_cls":
-        return NodeClassificationHead(**head_config)
-    elif type == "cos_edge_cls":
-        return CosEdgeClassificationHead(**head_config)
-    else:
-        msg = f"Unknown head type '{type}'."
-        logging.error(msg)
-        raise ValueError(msg)
+class HeadFactory:
+    def __init__(self, input_dim):
+        self.input_dim = input_dim
+    
+    def __call__(self, head_config) -> List[Head]:
+        """Returns a list of heads according to the configuration"""
+        type = head_config["type"]
+        del head_config["type"]
+        if type == "node_cls":
+            return NodeClassificationHead(self.input_dim, **head_config)
+        elif type == "cos_edge_cls":
+            return CosEdgeClassificationHead(self.input_dim, **head_config)
+        else:
+            msg = f"Unknown head type '{type}'."
+            logging.error(msg)
+            raise ValueError(msg)
 
 class ClassificationHead( Head):
-    def __init__(self, field, net_config, classes):
+    def __init__(self, input_dim, field, net_config, classes):
         super().__init__()
+        self._validate_net_config(net_config)
+        net_config["input_dim"] = input_dim
+        net_config["output_dim"] = len(classes)
         self.field = field
         self.net = net_factory(net_config)
         self.classes = classes
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
-        x = self(batch)
+        batch = self(batch)
+        x = batch.x
 
         label = getattr(batch, self.field)
         mask = getattr(batch, f"{self.field}_mask", None)
@@ -61,9 +68,11 @@ class ClassificationHead( Head):
     def evaluate(self, batches) -> Dict[str, torch.Tensor]:
         losses = []
         correct = torch.tensor(0)
+        counter = torch.tensor(0)
 
         for batch in batches:
-            x = self(batch)
+            batch = self(batch)
+            x = batch.x
 
             label = getattr(batch, self.field)
             mask = getattr(batch, f"{self.field}_mask", None)
@@ -72,11 +81,23 @@ class ClassificationHead( Head):
                 label = label[mask]
             
             loss = self.criterion(x, label)
+            losses.append(loss)
             pred_label = torch.argmax(x, dim=1)
+            corr_label = torch.argmax(label, dim=1)
 
-            correct += ((pred_label == label) * mask).sum().item()
+            correct += (pred_label == corr_label).sum().item()
+            counter += pred_label.shape[0]
+        
+        return {
+            f"{self.field}_eval": torch.mean(torch.tensor(losses)),
+            f"{self.field}_eval_acc": correct / counter
+        }
 
-
+    def _validate_net_config(self, net_config):
+        forbidden_attributes = ["input_dim", "output_dim"]
+        for forbidden_attribute in forbidden_attributes:
+            if forbidden_attribute in net_config:
+                raise ValueError(f"Invalid 'net_config' for classification head, found '{forbidden_attribute}' attribute which is set automatically.")
 
 class NodeClassificationHead(ClassificationHead):
     def forward(self, batch):

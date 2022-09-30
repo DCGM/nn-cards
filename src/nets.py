@@ -2,6 +2,8 @@
 # author Michal Hradiš
 
 import logging
+from copy import copy
+
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
@@ -16,19 +18,19 @@ def net_factory(config):
         return MLP(**config)
     elif net_type == "gcn":
         return GCN(**config)
-    elif net_type == "null":
-        return NullNet()
+    elif net_type == "identity":
+        return IdentityNet(**config)
     else:
         msg = f"Unknown network type '{net_type}'."
         logging.error(msg)
         raise ValueError(msg)
 
-class NullNet(torch.nn.Module):
-    def __init__(self):
+class IdentityNet(torch.nn.Module):
+    def __init__(self, input_dim=None, output_dim=None):
         super().__init__()
 
     def forward(self, batch):
-        return batch.x
+        return copy(batch)
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
@@ -43,7 +45,9 @@ class MLP(torch.nn.Module):
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
         x = self.net(x)
-        return x
+        d_copy = copy(data)
+        d_copy.x = x
+        return d_copy
 
 
 class GCN(torch.nn.Module):
@@ -86,6 +90,6 @@ class GCN(torch.nn.Module):
                     x = self.gcn_activation(x)
 
         x = self.output(x)
-
-        return x
-
+        d_copy = copy(data)
+        d_copy.x = x
+        return d_copy

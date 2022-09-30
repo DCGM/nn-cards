@@ -87,7 +87,7 @@ def main():
     dataset_train = dataset_factory(args.data_path)
 
     dataloader_train = dataloader_factory(dataset_train, args.batch_size, args.dataloader_num_workers)
-    dataloader_val = None # TODO
+    dataloader_val = dataloader_factory(dataset_train, args.batch_size, args.dataloader_num_workers) # TODO
 
     checkpoint_path = None
     if args.in_checkpoint:
@@ -129,7 +129,7 @@ def main():
             torch.save(model.state_dict(), checkpoint_path)
 
             eval_results = model.evaluate(dataloader_val)
-            stats.add(eval_results)
+            stats.add({key: value.item() for key, value in eval_results.items()})
             model.train()
             
             log_progress(stats, iteration, time() - start_time)
