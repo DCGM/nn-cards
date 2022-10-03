@@ -12,7 +12,7 @@ from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr
 
 class Head(torch.nn.Module, ABC):
     @abstractmethod
-    def compute_loss(self, output, batch) -> Dict[str, torch.Tensor]:
+    def compute_loss(self, output) -> Dict[str, torch.Tensor]:
         pass
 
     @abstractmethod
