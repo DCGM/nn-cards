@@ -118,6 +118,7 @@ def main():
         stats.add({key: value.item() for key, value in losses.items()})
 
         if iteration % args.view_step == 0:
+            logging.info("Evaluating...")
             if args.out_checkpoint:
                 checkpoint_path = args.out_checkpoint
             elif args.checkpoint_dir:
@@ -125,8 +126,18 @@ def main():
                 checkpoint_path = args.checkpoint_dir / f"checkpoint_{iteration:06d}.pth"
             torch.save(model.state_dict(), checkpoint_path)
 
-            eval_results = model.evaluate(dataloader_val)
-            stats.add({key: value.item() for key, value in eval_results.items()})
+            model.eval_reset()
+            for eval_batch in tqdm.tqdm(dataloader_val):
+                with torch.no_grad():
+                    eval_batch.to(args.device)
+                    
+                    eval_outputs = model(eval_batch)
+                    eval_losses = model.compute_loss(outputs)
+                    eval_results = model.eval_add(eval_outputs)
+                    
+
+            eval_results = model.eval_get()
+            stats.add({key: value for key, value in eval_results.items()})
             model.train()
             
             log_progress(stats, iteration, time() - start_time)

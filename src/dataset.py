@@ -70,21 +70,33 @@ class AddVectorAttr(DataBuild):
         setattr(data, self.attr_name, attr_value)
         return data
 
-class AddOneHotAttr(DataBuild):
-    def __init__(self, attr_name: str, field: str, classes: List[str]):
-        self.attr_name = attr_name
-        self.field = field
+class OneHotEncoder:
+    def __init__(self, classes: List[str]):
         self.classes = classes
-
-    def __call__(self, data: Data, graph) -> Data:
-        field_value = graph["nodes"][self.field]
+    
+    def encode(self, labels: List[str]) -> torch.LongTensor:
         indices = torch.tensor([
-            self.classes.index(item) for item in field_value
+            self.classes.index(item) for item in labels
         ], dtype=torch.long)
         one_hot_encoded = torch.nn.functional.one_hot(
             indices,
             num_classes=len(self.classes)
-        ).float()
+        )
+        return one_hot_encoded
+
+    def decode(self, values: torch.LongTensor) -> List[str]:
+        labels = torch.argmax(values, dim=1)
+        return [self.classes[i] for i in labels]
+
+class AddOneHotAttr(DataBuild):
+    def __init__(self, attr_name: str, field: str, encoder):
+        self.encoder = encoder
+        self.attr_name = attr_name
+        self.field = field
+
+    def __call__(self, data: Data, graph) -> Data:
+        field_value = graph["nodes"][self.field]
+        one_hot_encoded = self.encoder.encode(field_value).float()
         setattr(data, self.attr_name, one_hot_encoded)
         return data
 

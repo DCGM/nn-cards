@@ -4,6 +4,7 @@
 import logging
 from abc import ABC, abstractmethod
 from copy import copy
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -12,8 +13,8 @@ import torch_geometric
 
 class Backbone(ABC):
     @abstractmethod
-    def get_output_dim(self) -> int:
-        pass
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        """When overridden should return dims of node, edge and graph features"""
 
 def net_factory(config):
     net_type = config["type"].lower()
@@ -43,8 +44,8 @@ class IdentityNet(torch.nn.Module, Backbone):
     def forward(self, batch):
         return copy(batch)
     
-    def get_output_dim(self) -> int:
-        return self.input_dim
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        return self.input_dim, 0, 0
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
@@ -106,5 +107,5 @@ class GCN(torch.nn.Module, Backbone):
         d_copy.x = x
         return d_copy
 
-    def get_output_dim(self) -> int:
-        return self.hidden_dim
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        return self.hidden_dim, 0, 0

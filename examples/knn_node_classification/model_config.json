@@ -1,8 +1,13 @@
 {
-    "input": {
-        "type": "vector",
-        "fields": [ "startX", "endX", "startY", "endY" ]
-    },
+    "input_transforms": [
+        {
+            "attr_name": "x",
+            "type": "vector",
+            "fields": [
+                "startX", "endX", "startY", "endY"
+            ]
+        }
+    ],
     "backbone": {
         "type": "gcn",
         "gcn_layers": 4,

@@ -35,15 +35,16 @@ class Config:
     def _get_data_build(self, config, model: MultiHeadModel):
         data_builds = []
 
-        input_config = config["input"]
-        input_type = input_config["type"].lower()
-        del input_config["type"]
-        if input_type == "vector":
-            data_builds.append(AddVectorAttr("x", **input_config))
-        else:
-            msg = f"Unknown input type '{input_type}'"
-            logging.error(msg)
-            raise ValueError(msg)
+        input_transforms_config = config["input_transforms"]
+        for input_transform in input_transforms_config:
+            input_type = input_transform["type"].lower()
+            del input_transform["type"]
+            if input_type == "vector":
+                data_builds.append(AddVectorAttr(**input_transform))
+            else:
+                msg = f"Unknown input type '{input_type}'"
+                logging.error(msg)
+                raise ValueError(msg)
 
         head_data_builds = [head.get_data_build() for head in model.heads]
         data_builds.extend(head_data_builds)

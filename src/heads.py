@@ -3,21 +3,28 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import torch
 
+
 from .nets import net_factory
-from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr
+from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder
+from .evals import ArgMaxClassificationEval
 
 class Head(torch.nn.Module, ABC):
     @abstractmethod
     def compute_loss(self, output) -> Dict[str, torch.Tensor]:
         pass
 
-    @abstractmethod
-    def evaluate(self, batches) -> Dict[str, torch.Tensor]:
+    def eval_add(self, output):
         pass
+
+    def eval_reset(self):
+        pass
+
+    def eval_get(self) -> Dict[str, Any]:
+        return {}
 
     def get_data_build(self) -> DataBuild:
         return NullDataBuild()
@@ -51,6 +58,8 @@ class ClassificationHead(Head):
         self.net = net_factory(net_config)
         self.classes = classes
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.encoder = OneHotEncoder(self.classes)
+        self.evaluator = ArgMaxClassificationEval(self.encoder)
 
     def compute_loss(self, output) -> Dict[str, torch.Tensor]:
         output_value = output.x
@@ -64,7 +73,27 @@ class ClassificationHead(Head):
         return {self.field: loss}
     
     def get_data_build(self) -> DataBuild:
-        return AddOneHotAttr(self.field, self.field, self.classes)
+        return AddOneHotAttr(self.field, self.field, self.encoder)
+
+    def eval_add(self, output):
+        x = output.x
+
+        label = getattr(output, self.field)
+        mask = getattr(output, f"{self.field}_mask", None)
+        if mask:
+            x = x[mask]
+            label = label[mask]
+            
+        self.evaluator.add(x, label)
+
+    def eval_reset(self):
+        self.evaluator.reset()
+    
+    def eval_get(self) -> Dict[str, Any]:
+        return {
+            f"{self.field}_eval_{key}": value
+                for key, value in self.evaluator.get_results().items()
+        }
 
     def evaluate(self, batches) -> Dict[str, torch.Tensor]:
         losses = []

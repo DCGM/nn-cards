@@ -2,7 +2,7 @@
 # author Pavel Ševčík
 
 import functools
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import torch
 
@@ -15,7 +15,7 @@ def model_factory(config):
     backbone = net_factory(backbone_config)
 
     # get backbone output dim
-    head_input_dim = backbone.get_output_dim()
+    head_input_dim, edge_input_dim, graph_input_dim = backbone.get_output_dims()
 
     # build heads
     head_config = config["heads"]
@@ -42,9 +42,15 @@ class MultiHeadModel(torch.nn.Module):
         # implementation of the simplest balancing, i.e. summation
         total_loss = sum(losses.values())
         total_loss.backward()
-    
-    def evaluate(self, dataloader_val) -> Dict[str, float]:
-        with torch.no_grad():
-            evaluation = (head.evaluate((self.backbone(batch.to(next(self.parameters()).device)) for batch in dataloader_val))
-                          for head in self.heads)
-            return functools.reduce(lambda x, y: {**x, **y}, evaluation, {})
+
+    def eval_reset(self):
+        for head in self.heads:
+            head.eval_reset()
+
+    def eval_add(self, outputs):
+        for head, output in outputs:
+            head.eval_add(output)
+
+    def eval_get(self) -> Dict[str, Any]:
+        evals = [head.eval_get() for head in self.heads]
+        return functools.reduce(lambda x, y: {**x, **y}, evals, {})
