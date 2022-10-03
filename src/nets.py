@@ -1,7 +1,8 @@
 # file nets.py
-# author Michal Hradiš
+# author Michal Hradiš, Pavel Ševčík
 
 import logging
+from abc import ABC, abstractmethod
 from copy import copy
 
 import torch
@@ -9,6 +10,10 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 import torch_geometric
 
+class Backbone(ABC):
+    @abstractmethod
+    def get_output_dim(self) -> int:
+        pass
 
 def net_factory(config):
     net_type = config["type"].lower()
@@ -25,12 +30,21 @@ def net_factory(config):
         logging.error(msg)
         raise ValueError(msg)
 
-class IdentityNet(torch.nn.Module):
+class IdentityNet(torch.nn.Module, Backbone):
     def __init__(self, input_dim=None, output_dim=None):
         super().__init__()
+        if input_dim != output_dim:
+            msg = f"Input dim and output dim should be equal but they differ {input_dim}!={output_dim}."
+            logging.error(msg)
+            raise ValueError(msg)
+        
+        self.input_dim = input_dim
 
     def forward(self, batch):
         return copy(batch)
+    
+    def get_output_dim(self) -> int:
+        return self.input_dim
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
@@ -50,9 +64,10 @@ class MLP(torch.nn.Module):
         return d_copy
 
 
-class GCN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
+class GCN(torch.nn.Module, Backbone):
+    def __init__(self, input_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
         super().__init__()
+        self.hidden_dim = hidden_dim
         self.layer_type = layer_type.lower()
         self.input_mlp = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim),
@@ -78,8 +93,6 @@ class GCN(torch.nn.Module):
             logging.error(f"Unknown graph layer '{layer_type}'.")
             exit(-1)
 
-        self.output = torch.nn.Linear(hidden_dim, output_dim)
-
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
         x = self.input_mlp(x)
@@ -89,7 +102,9 @@ class GCN(torch.nn.Module):
                 if self.gcn_activation:
                     x = self.gcn_activation(x)
 
-        x = self.output(x)
         d_copy = copy(data)
         d_copy.x = x
         return d_copy
+
+    def get_output_dim(self) -> int:
+        return self.hidden_dim

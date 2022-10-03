@@ -1,6 +1,6 @@
-# author: Pavel Ševčík
+# file model.py
+# author Pavel Ševčík
 
-import logging
 import functools
 from typing import Dict, List
 
@@ -10,10 +10,15 @@ from .nets import net_factory
 from .heads import Head, HeadFactory
 
 def model_factory(config):
+    # build backbone
     backbone_config = config["backbone"]
-    head_config = config["heads"]
     backbone = net_factory(backbone_config)
-    head_input_dim = backbone_config["output_dim"]
+
+    # get backbone output dim
+    head_input_dim = backbone.get_output_dim()
+
+    # build heads
+    head_config = config["heads"]
     head_factory = HeadFactory(head_input_dim)
     heads = [head_factory(cfg) for cfg in head_config]
     
@@ -27,11 +32,10 @@ class MultiHeadModel(torch.nn.Module):
 
     def forward(self, batch):
         batch = self.backbone(batch)
-        return {head.name: head(batch) for head in self.heads}
+        return [(head, head(batch)) for head in self.heads]
 
-    def compute_loss(self, batch) -> Dict[str, torch.Tensor]:
-        batch = self.backbone(batch)
-        losses = (head.compute_loss(batch) for head in self.heads)
+    def compute_loss(self, outputs) -> Dict[str, torch.Tensor]:
+        losses = (head.compute_loss(output) for head, output in outputs)
         return functools.reduce(lambda x, y: {**x, **y}, losses, {})
     
     def do_backward_pass(self, losses: Dict[str, torch.Tensor]):

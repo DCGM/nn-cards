@@ -3,7 +3,6 @@
 
 import logging
 logging.basicConfig(filename='example.log', level=logging.DEBUG)
-import json
 from argparse import ArgumentParser
 from pathlib import Path
 from statistics import mean
@@ -66,9 +65,6 @@ def optimizer_factory(model, optimization_config):
         raise ValueError(msg)
     return optimizer
 
-def evaluate(dataloader_val, model):
-    model.eval()
-
 def log_progress(statistics: Stats, step: int, timespan):
         """Log the current progress
 
@@ -115,7 +111,8 @@ def main():
 
         optimizer.zero_grad()
         
-        losses = model.compute_loss(batch)
+        outputs = model(batch)
+        losses = model.compute_loss(outputs)
         model.do_backward_pass(losses)
         optimizer.step()
         stats.add({key: value.item() for key, value in losses.items()})

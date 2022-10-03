@@ -3,7 +3,6 @@
 
 import functools
 from pathlib import Path
-from dataclasses import dataclass
 from typing import List
 from abc import ABC, abstractmethod
 

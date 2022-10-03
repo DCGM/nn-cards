@@ -1,7 +1,7 @@
 {
     "input": {
         "type": "vector",
-        "fields": [ "startX", "endX", "startY", "endY" ]
+        "fields": [ "startX", "endX", "startY" ]
     },
     "backbone": {
         "type": "gcn",
@@ -10,7 +10,7 @@
         "hidden_dim": 128,
         "layer_type": "GatedGraphConv",
         "activation": "None",
-        "input_dim": 4
+        "input_dim": 3
     },
     "heads": [
         {
@@ -29,6 +29,13 @@
                 "Source-book",
                 "Grave position"
             ],
+            "net_config": {
+                "type": "mlp"
+            }
+        },
+        {
+            "type": "node_regr",
+            "field": "endY",
             "net_config": {
                 "type": "mlp"
             }

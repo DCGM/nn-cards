@@ -3,13 +3,9 @@
 
 import logging
 import functools
-from typing import Tuple
-
-import torch.nn as nn
 
 from .dataset import GraphDataset, KnnRectangeCenterBuild
-from .dataset import AddOneHotAttr, AddVectorAttr, SequentialDataBuild
-from .nets import net_factory
+from .dataset import AddVectorAttr, SequentialDataBuild
 from .model import MultiHeadModel, model_factory
 
 class Config:

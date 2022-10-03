@@ -1,4 +1,5 @@
-# author: Pavel Ševčík
+# file utils.py
+# author Pavel Ševčík
 
 import json
 from collections import defaultdict
