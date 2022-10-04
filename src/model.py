@@ -14,12 +14,12 @@ def model_factory(config):
     backbone_config = config["backbone"]
     backbone = net_factory(backbone_config)
 
-    # get backbone output dim
-    head_input_dim, edge_input_dim, graph_input_dim = backbone.get_output_dims()
+    # get backbone output dims
+    feature_sizes = backbone.get_output_dims()
 
     # build heads
     head_config = config["heads"]
-    head_factory = HeadFactory(head_input_dim)
+    head_factory = HeadFactory(*feature_sizes)
     heads = [head_factory(cfg) for cfg in head_config]
     
     return MultiHeadModel(backbone, heads)

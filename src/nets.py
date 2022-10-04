@@ -54,7 +54,7 @@ class MLP(torch.nn.Module):
         layers = [ torch.nn.Linear(input_dim, hidden_dim)]
         for i in range(depth - 1):
             layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, hidden_dim)]
-        layers += [torch.nn.Linear(hidden_dim, output_dim)]
+        layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, output_dim)]
         self.net = torch.nn.Sequential(*layers)
 
     def forward(self, data):

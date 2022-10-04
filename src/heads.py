@@ -30,19 +30,21 @@ class Head(torch.nn.Module, ABC):
         return NullDataBuild()
     
 class HeadFactory:
-    def __init__(self, input_dim):
-        self.input_dim = input_dim
+    def __init__(self, node_feature_size, edge_feature_size, graph_feature_size):
+        self.node_feature_size = node_feature_size
+        self.edge_feature_size = edge_feature_size
+        self.graph_feature_size = graph_feature_size
     
     def __call__(self, head_config) -> List[Head]:
         """Returns a list of heads according to the configuration"""
         type = head_config["type"]
         del head_config["type"]
         if type == "node_cls":
-            return NodeClassificationHead(self.input_dim, **head_config)
+            return NodeClassificationHead(self.node_feature_size, **head_config)
         elif type == "cos_edge_cls":
-            return CosEdgeClassificationHead(self.input_dim, **head_config)
+            return CosEdgeClassificationHead(self.node_feature_size, **head_config)
         elif type == "node_regr":
-            return NodeRegressionHead(self.input_dim, **head_config)
+            return NodeRegressionHead(self.node_feature_size, **head_config)
         else:
             msg = f"Unknown head type '{type}'."
             logging.error(msg)
@@ -95,34 +97,6 @@ class ClassificationHead(Head):
                 for key, value in self.evaluator.get_results().items()
         }
 
-    def evaluate(self, batches) -> Dict[str, torch.Tensor]:
-        losses = []
-        correct = torch.tensor(0)
-        counter = torch.tensor(0)
-
-        for batch in batches:
-            batch = self(batch)
-            x = batch.x
-
-            label = getattr(batch, self.field)
-            mask = getattr(batch, f"{self.field}_mask", None)
-            if mask:
-                x = x[mask]
-                label = label[mask]
-            
-            loss = self.criterion(x, label)
-            losses.append(loss)
-            pred_label = torch.argmax(x, dim=1)
-            corr_label = torch.argmax(label, dim=1)
-
-            correct += (pred_label == corr_label).sum().item()
-            counter += pred_label.shape[0]
-        
-        return {
-            f"{self.field}_eval": torch.mean(torch.tensor(losses)),
-            f"{self.field}_eval_acc": correct / counter
-        }
-
     def _validate_net_config(self, net_config):
         forbidden_attributes = ["input_dim", "output_dim"]
         for forbidden_attribute in forbidden_attributes:
@@ -173,26 +147,6 @@ class NodeRegressionHead(Head):
     
     def get_data_build(self) -> DataBuild:
         return AddVectorAttr(self.field, [self.field])
-
-    def evaluate(self, batches) -> Dict[str, torch.Tensor]:
-        losses = []
-
-        for batch in batches:
-            batch = self(batch)
-            x = batch.x
-
-            output = getattr(batch, self.field)
-            mask = getattr(batch, f"{self.field}_mask", None)
-            if mask:
-                x = x[mask]
-                output = output[mask]
-            
-            loss = self.criterion(x, output)
-            losses.append(loss)
-        
-        return {
-            f"{self.field}_eval": torch.mean(torch.tensor(losses))
-        }
 
     def _validate_net_config(self, net_config):
         forbidden_attributes = ["input_dim", "output_dim"]
