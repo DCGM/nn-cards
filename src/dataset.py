@@ -31,7 +31,7 @@ class NullDataBuild(DataBuild):
 
 class KnnRectangeCenterBuild(GraphBuild):
     def __init__(self, k, rectangle_coords, leave_pos_attr=False, num_workers=0):
-        self.rectange_coords = rectangle_coords # [[start, end], [start, end]]
+        self.rectange_coords = rectangle_coords
         self.leave_pos_attr = leave_pos_attr
         self.knn_transform = KNNGraph(k=k, num_workers=num_workers)
     
@@ -51,7 +51,7 @@ class KnnRectangeCenterBuild(GraphBuild):
 
 class SequentialDataBuild(DataBuild):
     def __init__(self, data_builds: List[DataBuild]):
-        self.data_builds = data_builds # [Vector, OneHotAttrib]
+        self.data_builds = data_builds
     
     def __call__(self, data: Data, graph) -> Data:
         for data_build in self.data_builds:
@@ -60,8 +60,8 @@ class SequentialDataBuild(DataBuild):
 
 class AddVectorAttr(DataBuild):
     def __init__(self, attr_name: str, fields: List[str]):
-        self.attr_name = attr_name # attrib x
-        self.fields = fields # x features [start, end, start, end]
+        self.attr_name = attr_name
+        self.fields = fields
     
     def __call__(self, data: Data, graph) -> Data:
         to_tensor = functools.partial(torch.tensor, dtype=torch.float)
@@ -92,9 +92,9 @@ class OneHotEncoder:
 
 class AddOneHotAttrEdgeClassifier(DataBuild):
     def __init__(self, attr_name: str, field: str, encoder):
-        self.encoder = encoder  # OneHotEncoder
-        self.attr_name = attr_name  # line order
-        self.field = field  # line order
+        self.encoder = encoder
+        self.attr_name = attr_name
+        self.field = field
 
     def __call__(self, data: Data, graph) -> Data:
         dst, src = data["edge_index"]
@@ -110,9 +110,9 @@ class AddOneHotAttrEdgeClassifier(DataBuild):
 
 class AddOneHotAttr(DataBuild):
     def __init__(self, attr_name: str, field: str, encoder):
-        self.encoder = encoder # OneHotEncoder
-        self.attr_name = attr_name # line order
-        self.field = field # line order
+        self.encoder = encoder
+        self.attr_name = attr_name
+        self.field = field
 
     def __call__(self, data: Data, graph) -> Data:
         field_value = graph["nodes"][self.field]
@@ -126,8 +126,8 @@ class GraphDataset(Dataset):
             csv_path = Path(csv_path)
         
         self.csv_path = csv_path
-        self.data_build = data_build # SequentialDataBuild
-        self.graph_build = graph_build # KNNGraph
+        self.data_build = data_build
+        self.graph_build = graph_build
 
         self.graphs = self._load_graphs(csv_path, graph_features)
 

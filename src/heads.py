@@ -119,6 +119,7 @@ class CosEdgeClassificationHead(ClassificationHead):
 
         loss = self.criterion(output_value, label)
         return {self.field: loss}
+
     def get_data_build(self) -> DataBuild:
         return AddOneHotAttrEdgeClassifier(self.field, self.field, self.encoder)
 
@@ -132,6 +133,7 @@ class CosEdgeClassificationHead(ClassificationHead):
             label = label[mask]
 
         self.evaluator.add(x, label)
+
     def forward(self, batch):
         x, edge_index = batch.x, batch.edge_index
         src = x[edge_index[0]]
