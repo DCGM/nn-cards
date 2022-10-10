@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 import torch
 import pandas as pd
+from sympy import public
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.transforms import KNNGraph
@@ -30,7 +31,7 @@ class NullDataBuild(DataBuild):
 
 class KnnRectangeCenterBuild(GraphBuild):
     def __init__(self, k, rectangle_coords, leave_pos_attr=False, num_workers=0):
-        self.rectange_coords = rectangle_coords
+        self.rectange_coords = rectangle_coords # [[start, end], [start, end]]
         self.leave_pos_attr = leave_pos_attr
         self.knn_transform = KNNGraph(k=k, num_workers=num_workers)
     
@@ -50,7 +51,7 @@ class KnnRectangeCenterBuild(GraphBuild):
 
 class SequentialDataBuild(DataBuild):
     def __init__(self, data_builds: List[DataBuild]):
-        self.data_builds = data_builds
+        self.data_builds = data_builds # [Vector, OneHotAttrib]
     
     def __call__(self, data: Data, graph) -> Data:
         for data_build in self.data_builds:
@@ -59,8 +60,8 @@ class SequentialDataBuild(DataBuild):
 
 class AddVectorAttr(DataBuild):
     def __init__(self, attr_name: str, fields: List[str]):
-        self.attr_name = attr_name
-        self.fields = fields
+        self.attr_name = attr_name # attrib x
+        self.fields = fields # x features [start, end, start, end]
     
     def __call__(self, data: Data, graph) -> Data:
         to_tensor = functools.partial(torch.tensor, dtype=torch.float)
@@ -88,11 +89,30 @@ class OneHotEncoder:
         labels = torch.argmax(values, dim=1)
         return [self.classes[i] for i in labels]
 
+
+class AddOneHotAttrEdgeClassifier(DataBuild):
+    def __init__(self, attr_name: str, field: str, encoder):
+        self.encoder = encoder  # OneHotEncoder
+        self.attr_name = attr_name  # line order
+        self.field = field  # line order
+
+    def __call__(self, data: Data, graph) -> Data:
+        dst, src = data["edge_index"]
+        labels = []
+        for d, s in zip(dst, src):
+            if s + 1 == d:
+                labels.append(str(1))
+            else:
+                labels.append(str(0))
+        one_hot_encoded = self.encoder.encode(labels).float()
+        setattr(data, self.attr_name, one_hot_encoded)
+        return data
+
 class AddOneHotAttr(DataBuild):
     def __init__(self, attr_name: str, field: str, encoder):
-        self.encoder = encoder
-        self.attr_name = attr_name
-        self.field = field
+        self.encoder = encoder # OneHotEncoder
+        self.attr_name = attr_name # line order
+        self.field = field # line order
 
     def __call__(self, data: Data, graph) -> Data:
         field_value = graph["nodes"][self.field]
@@ -106,8 +126,8 @@ class GraphDataset(Dataset):
             csv_path = Path(csv_path)
         
         self.csv_path = csv_path
-        self.data_build = data_build
-        self.graph_build = graph_build
+        self.data_build = data_build # SequentialDataBuild
+        self.graph_build = graph_build # KNNGraph
 
         self.graphs = self._load_graphs(csv_path, graph_features)
 
@@ -126,7 +146,7 @@ class GraphDataset(Dataset):
         for graph_features_values, node_features_values in csv_data.groupby(graph_features):
             graph = {
                 feature: feature_value
-                for feature, feature_value in zip(graph_features, graph_features_values)
+                for feature, feature_value in zip(graph_features, str(graph_features_values))
             }
             graph["nodes"] = node_features_values
             graphs.append(graph)

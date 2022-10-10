@@ -1,0 +1,14 @@
+{
+    "graph_features": [
+        "image_id"
+    ],
+    "graph_build": {
+        "type": "knn_rectangle_center",
+        "k": 4,
+        "rectangle_coords": [
+            [ "startX", "endX" ],
+            [ "startY", "endY" ]
+        ],
+        "leave_pos_attr": "True"
+    }
+}

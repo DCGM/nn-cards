@@ -26,6 +26,8 @@ def net_factory(config):
         return GCN(**config)
     elif net_type == "identity":
         return IdentityNet(**config)
+    elif net_type == "edgemlp":
+        return EdgeMLP(**config)
     else:
         msg = f"Unknown network type '{net_type}'."
         logging.error(msg)
@@ -46,6 +48,23 @@ class IdentityNet(torch.nn.Module, Backbone):
     
     def get_output_dims(self) -> Tuple[int, int, int]:
         return self.input_dim, 0, 0
+
+
+class EdgeMLP(torch.nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
+        super().__init__()
+
+        layers = [torch.nn.Linear(2*input_dim, hidden_dim)]
+        for i in range(depth - 1):
+            layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, hidden_dim)]
+        layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, output_dim)]
+        self.net = torch.nn.Sequential(*layers)
+
+    def forward(self, data):
+        x = self.net(data)
+        #d_copy = copy(data)
+        #d_copy.x = x
+        return x
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
@@ -90,12 +109,15 @@ class GCN(torch.nn.Module, Backbone):
         elif self.layer_type == "GraphConv".lower():
             self.gcn = torch.nn.ModuleList(
                 [torch_geometric.nn.GraphConv(hidden_dim, hidden_dim) for i in range(gcn_layers)])
+        elif self.layer_type == "GATv2Conv".lower():
+            self.gcn = torch.nn.ModuleList(
+                [torch_geometric.nn.GATv2Conv(hidden_dim, hidden_dim // 4, heads=4, edge_dim=1) for i in range(gcn_layers)])
         else:
             logging.error(f"Unknown graph layer '{layer_type}'.")
             exit(-1)
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index
+        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         x = self.input_mlp(x)
         for layer in self.gcn:
             for i in range(self.gcn_repetitions):

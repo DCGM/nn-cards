@@ -9,7 +9,7 @@ import torch
 
 
 from .nets import net_factory
-from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder
+from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder, AddOneHotAttrEdgeClassifier
 from .evals import ArgMaxClassificationEval
 
 class Head(torch.nn.Module, ABC):
@@ -109,12 +109,35 @@ class NodeClassificationHead(ClassificationHead):
         return batch
 
 class CosEdgeClassificationHead(ClassificationHead):
+    def compute_loss(self, output) -> Dict[str, torch.Tensor]:
+        output_value = output.score
+        label = getattr(output, self.field)
+        mask = getattr(output, f"{self.field}_mask", None)
+        if mask:
+            output_value = output_value[mask]
+            label = label[mask]
+
+        loss = self.criterion(output_value, label)
+        return {self.field: loss}
+    def get_data_build(self) -> DataBuild:
+        return AddOneHotAttrEdgeClassifier(self.field, self.field, self.encoder)
+
+    def eval_add(self, output):
+        x = output.score
+
+        label = getattr(output, self.field)
+        mask = getattr(output, f"{self.field}_mask", None)
+        if mask:
+            x = x[mask]
+            label = label[mask]
+
+        self.evaluator.add(x, label)
     def forward(self, batch):
         x, edge_index = batch.x, batch.edge_index
-        x = self.net(batch)
-
-        src, dst = edge_index
-        score = torch.sum(x[src] * x[dst], dim=-1)
+        src = x[edge_index[0]]
+        dst = x[edge_index[1]]
+        edge_concat = torch.cat([src, dst], dim=-1)
+        score = self.net(edge_concat)
 
         batch.score = score
         return batch

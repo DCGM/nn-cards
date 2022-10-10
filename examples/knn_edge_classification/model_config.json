@@ -1,0 +1,33 @@
+{
+    "input_transforms": [
+        {
+            "attr_name": "x",
+            "type": "vector",
+            "fields": [
+                "startX", "endX", "startY", "endY"
+            ]
+        }
+    ],
+    "backbone": {
+        "type": "gcn",
+        "gcn_layers": 2,
+        "gcn_repetitions": 1,
+        "hidden_dim": 128,
+        "layer_type": "GATv2Conv",
+        "activation": "relu",
+        "input_dim": 4
+    },
+    "heads": [
+        {
+            "type": "cos_edge_cls",
+            "field": "line_order",
+            "classes": [
+                "0",
+                "1"
+            ],
+            "net_config": {
+                "type": "edgemlp"
+            }
+        }
+    ]
+}

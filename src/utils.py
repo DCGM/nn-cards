@@ -4,6 +4,8 @@
 import json
 from collections import defaultdict
 from typing import Dict
+import numpy as np
+import ast
 
 
 class Stats:
@@ -26,3 +28,18 @@ def json_str_or_path(s):
         pass
     with open(s) as f:
         return json.load(f)
+
+def parse_LN_inputs(line_coords):
+    inputs = []
+
+    for line_coord in line_coords:
+        line_coord = line_coord.replace("'", "")
+        line_coord = ast.literal_eval(line_coord)
+
+        s = np.sum(line_coord, axis=1)
+        upper_left = line_coord[np.argmin(s)]
+        lower_right = line_coord[np.argmax(s)]
+        coords = np.concatenate((upper_left, lower_right))
+        inputs.append(coords)
+
+    return np.array(inputs)
