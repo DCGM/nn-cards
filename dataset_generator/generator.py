@@ -3,13 +3,14 @@ from export_csv import CSVHandler
 
 
 class Generator:
-    def __init__(self, n_lines_range=(2, 10), n_pages=100000, page_resolution=(2000, 2000),
-                 line_range_offset=(200, 30), next_line_offset=60):
+    def __init__(self, n_lines_range=(2, 3), n_pages=5, page_resolution=(200, 200),
+                 line_range_offset=(200, 30), next_line_offset=60, path=None):
         self.n_lines_range = n_lines_range
         self.n_pages = n_pages
         self.page_resolution = page_resolution
         self.line_range_offset = line_range_offset
         self.next_line_offset = next_line_offset
+        self.path = path
 
     def create_line(self, prev_line, first_line=True):
         if first_line:
@@ -21,7 +22,7 @@ class Generator:
             lower_right_y = upper_left_y - y_offset                                                                         # |                - p2[x2, y2]|
             line = [upper_left_x, upper_left_y, lower_right_x, lower_right_y]
         else:
-            line = [prev_line[0], prev_line[1] + self.next_line_offset, prev_line[2], prev_line[3] + self.next_line_offset]
+            line = [prev_line[0], prev_line[1] - self.next_line_offset, prev_line[2], prev_line[3] - self.next_line_offset]
 
         return line
 
@@ -61,6 +62,6 @@ class Generator:
         csv = CSVHandler()
         for page_idx in range(self.n_pages):
             csv = self.create_page(page_idx, csv)
-        csv.to_csv("./csv/reading_order_dataset.csv")
+        csv.to_csv(self.path + "/reading_order_dataset.csv")
 
 

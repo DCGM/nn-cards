@@ -45,6 +45,7 @@ class KnnRectangeCenterBuild(GraphBuild):
         )
         data = Data(pos=pos)
         data = self.knn_transform(data)
+
         if not self.leave_pos_attr:
             del data.pos
         return data
@@ -90,16 +91,32 @@ class OneHotEncoder:
         return [self.classes[i] for i in labels]
 
 
-class AddOneHotAttrEdgeClassifier(DataBuild):
-    def __init__(self, attr_name: str, field: str, encoder):
-        self.encoder = encoder
+class AddVectorEdgeAttr(DataBuild):
+    def __init__(self, attr_name: str):
         self.attr_name = attr_name
-        self.field = field
 
     def __call__(self, data: Data, graph) -> Data:
-        dst, src = data["edge_index"]
+        to_tensor = functools.partial(torch.tensor, dtype=torch.float)
+        attr_value = []
+        src, dst = data["edge_index"]
+        for s, d in zip(src, dst):
+            if s + 1 == d or s == d + 1:
+                attr_value.append(1)
+            else:
+                attr_value.append(0)
+
+        setattr(data, self.attr_name, to_tensor(attr_value))
+        return data
+
+class AddOneHotAttrEdgeClassifier(DataBuild):
+    def __init__(self, attr_name: str, encoder):
+        self.encoder = encoder
+        self.attr_name = attr_name
+
+    def __call__(self, data: Data, graph) -> Data:
+        src, dst = data["edge_index"]
         labels = []
-        for d, s in zip(dst, src):
+        for s, d in zip(src, dst):
             if s + 1 == d:
                 labels.append(str(1))
             else:
@@ -146,7 +163,7 @@ class GraphDataset(Dataset):
         for graph_features_values, node_features_values in csv_data.groupby(graph_features):
             graph = {
                 feature: feature_value
-                for feature, feature_value in zip(graph_features, str(graph_features_values))
+                for feature, feature_value in zip(graph_features, graph_features_values)
             }
             graph["nodes"] = node_features_values
             graphs.append(graph)

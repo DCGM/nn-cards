@@ -32,7 +32,7 @@ def parse_arguments():
     parser.add_argument("--checkpoint-dir", default=Path("."), type=Path)
     parser.add_argument("--batch-size", default=32, type=int, help="Batch size.")
     parser.add_argument("--learning-rate", type=float, default=0.0002, help="Learning rate for ADAM.")
-    parser.add_argument("--device", type=torch.device, help="The device to train on", default=torch.device("cuda"))
+    parser.add_argument("--device", type=torch.device, help="The device to train on", default=torch.device("cpu"))
     parser.add_argument("--dataloader-num-workers", type=int, default=0)
     args = parser.parse_args()
     return args

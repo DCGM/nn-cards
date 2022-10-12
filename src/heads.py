@@ -3,13 +3,13 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import torch
 
 
 from .nets import net_factory
-from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder, AddOneHotAttrEdgeClassifier
+from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder, AddOneHotAttrEdgeClassifier, AddVectorEdgeAttr
 from .evals import ArgMaxClassificationEval
 
 class Head(torch.nn.Module, ABC):
@@ -120,8 +120,8 @@ class CosEdgeClassificationHead(ClassificationHead):
         loss = self.criterion(output_value, label)
         return {self.field: loss}
 
-    def get_data_build(self) -> DataBuild:
-        return AddOneHotAttrEdgeClassifier(self.field, self.field, self.encoder)
+    def get_data_build(self) -> DataBuild: #tuple[DataBuild, DataBuild]:
+        return AddOneHotAttrEdgeClassifier(self.field, self.encoder)#, AddVectorEdgeAttr(self.field)
 
     def eval_add(self, output):
         x = output.score
@@ -136,8 +136,8 @@ class CosEdgeClassificationHead(ClassificationHead):
 
     def forward(self, batch):
         x, edge_index = batch.x, batch.edge_index
-        src = x[edge_index[0]]
-        dst = x[edge_index[1]]
+        dst = x[edge_index[0]]
+        src = x[edge_index[1]]
         edge_concat = torch.cat([src, dst], dim=-1)
         score = self.net(edge_concat)
 
