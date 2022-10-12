@@ -8,7 +8,6 @@ from abc import ABC, abstractmethod
 
 import torch
 import pandas as pd
-from sympy import public
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.transforms import KNNGraph
@@ -90,28 +89,11 @@ class OneHotEncoder:
         labels = torch.argmax(values, dim=1)
         return [self.classes[i] for i in labels]
 
-
-class AddVectorEdgeAttr(DataBuild):
-    def __init__(self, attr_name: str):
-        self.attr_name = attr_name
-
-    def __call__(self, data: Data, graph) -> Data:
-        to_tensor = functools.partial(torch.tensor, dtype=torch.float)
-        attr_value = []
-        src, dst = data["edge_index"]
-        for s, d in zip(src, dst):
-            if s + 1 == d or s == d + 1:
-                attr_value.append(1)
-            else:
-                attr_value.append(0)
-
-        setattr(data, self.attr_name, to_tensor(attr_value))
-        return data
-
 class AddOneHotAttrEdgeClassifier(DataBuild):
-    def __init__(self, attr_name: str, encoder):
+    def __init__(self, attr_name: str, field: str, encoder):
         self.encoder = encoder
         self.attr_name = attr_name
+        self.field = field
 
     def __call__(self, data: Data, graph) -> Data:
         src, dst = data["edge_index"]
