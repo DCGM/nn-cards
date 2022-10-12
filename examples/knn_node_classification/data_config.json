@@ -3,11 +3,12 @@
         "cardName", "cardHeight", "cardWidth"
     ],
     "graph_build": {
-        "type": "knn_rectangle_center",
+        "type": "knn_rectangle_edge",
         "k": 4,
         "rectangle_coords": [
             [ "startX", "endX" ],
             [ "startY", "endY" ]
-        ]
+        ],
+        "n_subdivisions": 2
     }
 }

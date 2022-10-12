@@ -9,6 +9,13 @@
                 "startY",
                 "endY"
             ]
+        },
+        {
+            "attr_name": "rect_coords",
+            "type": "vector",
+            "fields": [
+                "startX", "endX", "startY", "endY"
+            ]
         }
     ],
     "backbone": [

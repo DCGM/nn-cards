@@ -4,7 +4,7 @@
 import logging
 import functools
 
-from .dataset import GraphDataset, KnnRectangeCenterBuild
+from .dataset import GraphDataset, KnnRectangeCenterBuild, KnnRectangeEdgeBuild
 from .dataset import AddVectorAttr, SequentialDataBuild
 from .model import MultiHeadModel, model_factory
 
@@ -27,6 +27,8 @@ class Config:
         del config["type"]
         if type == "knn_rectangle_center":
             return KnnRectangeCenterBuild(**config)
+        elif type == "knn_rectangle_edge":
+            return KnnRectangeEdgeBuild(**config)
         else:
             msg = f"Unknown graph build type '{type}'"
             logging.error(msg)

@@ -1,6 +1,7 @@
 # file dataset.py
 # author Pavel Ševčík
 
+import logging
 import functools
 from pathlib import Path
 from typing import List
@@ -11,6 +12,8 @@ import pandas as pd
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.transforms import KNNGraph
+
+from .algorithms import l2_distance_matrix
 
 class GraphBuild(ABC):
     @abstractmethod
@@ -23,6 +26,73 @@ class DataBuild(ABC):
     def __call__(self, data: Data, graph) -> Data:
         """When overriden should modify a given Data object"""
         pass
+
+class KnnRectangeEdgeBuild(GraphBuild):
+    def __init__(self, k, rectangle_coords, n_subdivisions=1):
+        self.k = k
+        self.rectangle_coords = rectangle_coords
+        self.n_subdivisions = n_subdivisions
+        if len(self.rectangle_coords) != 2:
+            msg = f"Invalid number of rectangle coords '{len(self.rectangle_coords)}', expected exactly 2."
+            logging.error(msg)
+            raise ValueError(msg)
+
+    def __call__(self, graph) -> Data:
+        to_tensor = functools.partial(torch.tensor, dtype=torch.float)
+        rectangles = torch.stack(
+            [
+                to_tensor(graph["nodes"][attr].to_numpy())
+                for coords in self.rectangle_coords for attr in coords
+            ], dim=1
+        )
+        points_per_rect = 2**(self.n_subdivisions+2)
+        points = []
+        for rect in rectangles:
+            points.extend(self._subdivide(self.n_subdivisions, rect))
+        points = torch.stack(points)
+        
+        distance_matrix = l2_distance_matrix(points)
+        # deny selfloops within rectangles
+        for i in range(0, len(points), points_per_rect):
+            distance_matrix[i:i+points_per_rect,i:i+points_per_rect] = float("inf")
+        
+        # reduce point distances to rect distances
+        rect_distances = torch.zeros((len(rectangles), len(rectangles)))
+        for i in range(len(rectangles)):
+            for j in range(i,len(rectangles)):
+                x_start = i * points_per_rect
+                x_end = (i+1) * points_per_rect
+                y_start = j * points_per_rect
+                y_end = (j+1) * points_per_rect
+                dist = torch.min(distance_matrix[y_start:y_end, x_start:x_end])
+                
+                rect_distances[i,j] = dist
+                rect_distances[j,i] = dist
+        
+        indices = torch.argsort(rect_distances, axis=1)
+        
+        edge_index = []
+        for rect_idx in range(len(rectangles)):
+            edge_index.extend([[rect_idx, neigh_idx] for neigh_idx in indices[rect_idx,:self.k]])
+        edge_index = torch.tensor(edge_index, dtype=torch.long).T
+
+        return Data(edge_index=edge_index)
+        
+    def _subdivide(self, n_subdivisions, rect: torch.Tensor) -> torch.Tensor:
+        x1, x2, y1, y2 = rect
+        points = torch.tensor([[x1, y1], [x1, y2], [x2, y1], [x2, y2]])
+        edges = zip(points, torch.roll(points, shifts=-1, dims=0))
+        return torch.cat([self._subdivide_edge(n_subdivisions, a, b) for a, b in edges])
+    
+    def _subdivide_edge(self, n_subdivisions, a, b):
+        if n_subdivisions == 0:
+            return torch.stack((a,))
+        else:
+            mid = (a+b)/2
+            first_part = self._subdivide_edge(n_subdivisions-1, a, mid)
+            second_part = self._subdivide_edge(n_subdivisions-1, mid, b)
+            return torch.cat((first_part, second_part))
+
 
 class NullDataBuild(DataBuild):
     def __call__(self, data: Data, graph) -> Data:
