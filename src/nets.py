@@ -90,6 +90,9 @@ class MLP(torch.nn.Module, Backbone):
     def _write_output_value(self, data: Data, value):
         setattr(data, self.mapping[self.target], value)
 
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        pass
+
 
 class GCN(torch.nn.Module, Backbone):
     def __init__(self, input_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
