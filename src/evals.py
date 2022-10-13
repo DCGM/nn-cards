@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 import torch
 
-from .dataset import OneHotEncoder
+from .dataset import ClassListEncoder
 
 class Eval(ABC):
     @abstractmethod
@@ -14,7 +14,7 @@ class Eval(ABC):
         pass
 
 class ArgMaxClassificationEval(Eval):
-    def __init__(self, encoder: OneHotEncoder):
+    def __init__(self, encoder: ClassListEncoder):
         n_classes = len(encoder.classes)
         self.encoder = encoder
         self.confusion_matrix = torch.zeros((n_classes, n_classes))

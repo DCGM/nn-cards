@@ -19,8 +19,9 @@
     },
     "heads": [
         {
-            "type": "node_cls",
+            "type": "cls",
             "field": "label",
+            "edge": false,
             "classes": [
                 "Name",
                 "None",

@@ -6,13 +6,21 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 import torch
-
+from torch_geometric.data import Data
 
 from .nets import net_factory
-from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddOneHotAttr, OneHotEncoder, AddOneHotAttrEdgeClassifier
+from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddEncodedAttr, ClassListEncoder, AddOneHotAttrEdgeClassifier
 from .evals import ArgMaxClassificationEval
 
 class Head(torch.nn.Module, ABC):
+    def __init__(self, target):
+        self.target = target
+        self.mapping = {
+            "node": "x",
+            "edge": "edge_attr",
+            "graph": "graph_attr"
+        }
+
     @abstractmethod
     def compute_loss(self, output) -> Dict[str, torch.Tensor]:
         pass
@@ -29,6 +37,9 @@ class Head(torch.nn.Module, ABC):
     def get_data_build(self) -> DataBuild:
         return NullDataBuild()
     
+    def _get_output_value(self, data: Data):
+        return getattr(data, self.mapping[self.target])
+
 class HeadFactory:
     def __init__(self, node_feature_size, edge_feature_size, graph_feature_size):
         self.node_feature_size = node_feature_size
@@ -38,21 +49,21 @@ class HeadFactory:
     def __call__(self, head_config) -> List[Head]:
         """Returns a list of heads according to the configuration"""
         type = head_config["type"]
+        edge = head_config["edge"]
         del head_config["type"]
-        if type == "node_cls":
-            return NodeClassificationHead(self.node_feature_size, **head_config)
-        elif type == "cos_edge_cls":
-            return CosEdgeClassificationHead(self.node_feature_size, **head_config)
+        if type == "cls":
+            input_size = self.edge_feature_size if edge else self.node_feature_size
+            return ClassificationHead(input_size, **head_config)
         elif type == "node_regr":
-            return NodeRegressionHead(self.node_feature_size, **head_config)
+            return RegressionHead(self.node_feature_size, **head_config)
         else:
             msg = f"Unknown head type '{type}'."
             logging.error(msg)
             raise ValueError(msg)
 
 class ClassificationHead(Head):
-    def __init__(self, input_dim, field, net_config, classes):
-        super().__init__()
+    def __init__(self, input_dim, target, field, net_config, classes):
+        super().__init__(target)
         self._validate_net_config(net_config)
         net_config["input_dim"] = input_dim
         net_config["output_dim"] = len(classes)
@@ -60,13 +71,18 @@ class ClassificationHead(Head):
         self.net = net_factory(net_config)
         self.classes = classes
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.encoder = OneHotEncoder(self.classes)
+        self.encoder = ClassListEncoder(self.classes)
         self.evaluator = ArgMaxClassificationEval(self.encoder)
 
-    def compute_loss(self, output) -> Dict[str, torch.Tensor]:
-        output_value = output.x
-        label = getattr(output, self.field)
-        mask = getattr(output, f"{self.field}_mask", None)
+    def forward(self, data):
+        data = self.net(data)
+        return data
+    
+    def compute_loss(self, data) -> Dict[str, torch.Tensor]:
+        output_value = self._get_output_value(data)
+
+        label = getattr(data, self.field)
+        mask = getattr(data, f"{self.field}_mask", None)
         if mask:
             output_value = output_value[mask]
             label = label[mask]
@@ -75,18 +91,18 @@ class ClassificationHead(Head):
         return {self.field: loss}
     
     def get_data_build(self) -> DataBuild:
-        return AddOneHotAttr(self.field, self.field, self.encoder)
+        return AddEncodedAttr(self.field, self.field, self.encoder)
 
-    def eval_add(self, output):
-        x = output.x
+    def eval_add(self, data):
+        output_value = self._get_output_value(data)
 
-        label = getattr(output, self.field)
-        mask = getattr(output, f"{self.field}_mask", None)
+        label = getattr(data, self.field)
+        mask = getattr(data, f"{self.field}_mask", None)
         if mask:
-            x = x[mask]
+            output_value = output_value[mask]
             label = label[mask]
             
-        self.evaluator.add(x, label)
+        self.evaluator.add(output_value, label)
 
     def eval_reset(self):
         self.evaluator.reset()
@@ -103,51 +119,9 @@ class ClassificationHead(Head):
             if forbidden_attribute in net_config:
                 raise ValueError(f"Invalid 'net_config' for classification head, found '{forbidden_attribute}' attribute which is set automatically.")
 
-class NodeClassificationHead(ClassificationHead):
-    def forward(self, batch):
-        batch = self.net(batch)
-        return batch
-
-class CosEdgeClassificationHead(ClassificationHead):
-    def compute_loss(self, output) -> Dict[str, torch.Tensor]:
-        output_value = output.score
-        label = getattr(output, self.field)
-        mask = getattr(output, f"{self.field}_mask", None)
-        if mask:
-            output_value = output_value[mask]
-            label = label[mask]
-
-        loss = self.criterion(output_value, label)
-        return {self.field: loss}
-
-    def get_data_build(self) -> DataBuild:
-        return AddOneHotAttrEdgeClassifier(self.field, self.field, self.encoder)
-
-    def eval_add(self, output):
-        x = output.score
-
-        label = getattr(output, self.field)
-        mask = getattr(output, f"{self.field}_mask", None)
-        if mask:
-            x = x[mask]
-            label = label[mask]
-
-        self.evaluator.add(x, label)
-
-    def forward(self, batch):
-        x, edge_index = batch.x, batch.edge_index
-        src = x[edge_index[0]]
-        dst = x[edge_index[1]]
-        edge_concat = torch.cat([src, dst], dim=-1)
-        score = self.net(edge_concat)
-
-        batch.score = score
-        return batch
-
-class NodeRegressionHead(Head):
-    
-    def __init__(self, input_dim, field, net_config):
-        super().__init__()
+class RegressionHead(Head):
+    def __init__(self, input_dim, target, field, net_config, edge=False):
+        super().__init__(target)
         self._validate_net_config(net_config)
         net_config["input_dim"] = input_dim
         net_config["output_dim"] = 1
@@ -155,14 +129,14 @@ class NodeRegressionHead(Head):
         self.net = net_factory(net_config)
         self.criterion = torch.nn.MSELoss()
     
-    def forward(self, batch):
-        batch = self.net(batch)
-        return batch
+    def forward(self, data):
+        data = self.net(data)
+        return data
 
-    def compute_loss(self, output) -> Dict[str, torch.Tensor]:
-        output_value = output.x
-        label = getattr(output, self.field)
-        mask = getattr(output, f"{self.field}_mask", None)
+    def compute_loss(self, data) -> Dict[str, torch.Tensor]:
+        output_value = data.x
+        label = getattr(data, self.field)
+        mask = getattr(data, f"{self.field}_mask", None)
         if mask:
             output_value = output_value[mask]
             label = label[mask]

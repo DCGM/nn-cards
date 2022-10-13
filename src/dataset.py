@@ -71,7 +71,7 @@ class AddVectorAttr(DataBuild):
         setattr(data, self.attr_name, attr_value)
         return data
 
-class OneHotEncoder:
+class ClassListEncoder:
     def __init__(self, classes: List[str]):
         self.classes = classes
     
@@ -79,11 +79,7 @@ class OneHotEncoder:
         indices = torch.tensor([
             self.classes.index(item) for item in labels
         ], dtype=torch.long)
-        one_hot_encoded = torch.nn.functional.one_hot(
-            indices,
-            num_classes=len(self.classes)
-        )
-        return one_hot_encoded
+        return indices
 
     def decode(self, values: torch.LongTensor) -> List[str]:
         labels = torch.argmax(values, dim=1)
@@ -107,7 +103,7 @@ class AddOneHotAttrEdgeClassifier(DataBuild):
         setattr(data, self.attr_name, one_hot_encoded)
         return data
 
-class AddOneHotAttr(DataBuild):
+class AddEncodedAttr(DataBuild):
     def __init__(self, attr_name: str, field: str, encoder):
         self.encoder = encoder
         self.attr_name = attr_name
@@ -115,8 +111,8 @@ class AddOneHotAttr(DataBuild):
 
     def __call__(self, data: Data, graph) -> Data:
         field_value = graph["nodes"][self.field]
-        one_hot_encoded = self.encoder.encode(field_value).float()
-        setattr(data, self.attr_name, one_hot_encoded)
+        encoded = self.encoder.encode(field_value)
+        setattr(data, self.attr_name, encoded)
         return data
 
 class GraphDataset(Dataset):
@@ -142,7 +138,9 @@ class GraphDataset(Dataset):
     def _load_graphs(self, csv_path: Path, graph_features: List[str]):
         csv_data = pd.read_csv(csv_path)
         graphs = []
-        for graph_features_values, node_features_values in csv_data.groupby(graph_features):
+        for graph_features_values, node_features_values in csv_data.groupby(by=graph_features):
+            if len(graph_features) == 1:
+                graph_features_values = (graph_features_values,)
             graph = {
                 feature: feature_value
                 for feature, feature_value in zip(graph_features, graph_features_values)

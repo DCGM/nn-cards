@@ -6,13 +6,13 @@ from typing import Any, Dict, List
 
 import torch
 
-from .nets import net_factory
+from .nets import SequentialBackbone, net_factory
 from .heads import Head, HeadFactory
 
 def model_factory(config):
     # build backbone
     backbone_config = config["backbone"]
-    backbone = net_factory(backbone_config)
+    backbone = SequentialBackbone([net_factory(cfg) for cfg in backbone_config])
 
     # get backbone output dims
     feature_sizes = backbone.get_output_dims()

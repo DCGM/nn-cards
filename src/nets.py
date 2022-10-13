@@ -4,12 +4,13 @@
 import logging
 from abc import ABC, abstractmethod
 from copy import copy
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 import torch_geometric
+from torch_geometric.data import Data
+from torch_geometric.nn import GCNConv
 
 class Backbone(ABC):
     @abstractmethod
@@ -26,12 +27,22 @@ def net_factory(config):
         return GCN(**config)
     elif net_type == "identity":
         return IdentityNet(**config)
-    elif net_type == "edgemlp":
-        return EdgeMLP(**config)
     else:
         msg = f"Unknown network type '{net_type}'."
         logging.error(msg)
         raise ValueError(msg)
+
+class SequentialBackbone(Backbone):
+    def __init__(self, nets: List[Backbone]):
+        if len(nets) < 1:
+            msg = f"At least one nets is required to build a sequential backbone"
+            logging.error(msg)
+            raise ValueError(msg)
+
+        self.nets = nets
+
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        return self.nets[-1].get_output_dims()
 
 class IdentityNet(torch.nn.Module, Backbone):
     def __init__(self, input_dim=None, output_dim=None):
@@ -50,26 +61,16 @@ class IdentityNet(torch.nn.Module, Backbone):
         return self.input_dim, 0, 0
 
 
-class EdgeMLP(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
+class MLP(torch.nn.Module, Backbone):
+
+    def __init__(self, target, input_dim, output_dim, edge=False, hidden_dim=128, depth=4):
         super().__init__()
-
-        layers = [torch.nn.Linear(2*input_dim, hidden_dim)]
-        for i in range(depth - 1):
-            layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, hidden_dim)]
-        layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, output_dim)]
-        self.net = torch.nn.Sequential(*layers)
-
-    def forward(self, data):
-        x = self.net(data)
-        #d_copy = copy(data)
-        #d_copy.x = x
-        return x
-
-class MLP(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128, depth=4):
-        super().__init__()
-
+        self.target = target
+        self.mapping = {
+            "node": "x",
+            "edge": "edge_attr",
+            "graph": "graph_attr"
+        }
         layers = [ torch.nn.Linear(input_dim, hidden_dim)]
         for i in range(depth - 1):
             layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, hidden_dim)]
@@ -77,11 +78,17 @@ class MLP(torch.nn.Module):
         self.net = torch.nn.Sequential(*layers)
 
     def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x = self.net(x)
+        value = self._get_input_value(data)
+        value = self.net(value)
         d_copy = copy(data)
-        d_copy.x = x
+        self._write_output_value(d_copy, value)
         return d_copy
+
+    def _get_input_value(self, data: Data):
+        return getattr(data, self.mapping[self.target])
+
+    def _write_output_value(self, data: Data, value):
+        setattr(data, self.mapping[self.target], value)
 
 
 class GCN(torch.nn.Module, Backbone):
