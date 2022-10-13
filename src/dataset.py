@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 
 import torch
 import pandas as pd
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.transforms import KNNGraph
@@ -57,23 +58,16 @@ class KnnRectangeEdgeBuild(GraphBuild):
             distance_matrix[i:i+points_per_rect,i:i+points_per_rect] = float("inf")
         
         # reduce point distances to rect distances
-        rect_distances = torch.zeros((len(rectangles), len(rectangles)))
-        for i in range(len(rectangles)):
-            for j in range(i,len(rectangles)):
-                x_start = i * points_per_rect
-                x_end = (i+1) * points_per_rect
-                y_start = j * points_per_rect
-                y_end = (j+1) * points_per_rect
-                dist = torch.min(distance_matrix[y_start:y_end, x_start:x_end])
-                
-                rect_distances[i,j] = dist
-                rect_distances[j,i] = dist
+        rect_distances = F.max_pool2d(
+            torch.stack((-distance_matrix,)),
+            points_per_rect
+        )[0]
         
-        indices = torch.argsort(rect_distances, axis=1)
+        _, indices = torch.topk(rect_distances, self.k, dim=1)
         
         edge_index = []
         for rect_idx in range(len(rectangles)):
-            edge_index.extend([[rect_idx, neigh_idx] for neigh_idx in indices[rect_idx,:self.k]])
+            edge_index.extend([[rect_idx, neigh_idx] for neigh_idx in indices[rect_idx]])
         edge_index = torch.tensor(edge_index, dtype=torch.long).T
 
         return Data(edge_index=edge_index)
