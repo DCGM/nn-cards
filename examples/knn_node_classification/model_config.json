@@ -4,24 +4,29 @@
             "attr_name": "x",
             "type": "vector",
             "fields": [
-                "startX", "endX", "startY", "endY"
+                "startX",
+                "endX",
+                "startY",
+                "endY"
             ]
         }
     ],
-    "backbone": {
-        "type": "gcn",
-        "gcn_layers": 4,
-        "gcn_repetitions": 1,
-        "hidden_dim": 128,
-        "layer_type": "GatedGraphConv",
-        "activation": "None",
-        "input_dim": 4
-    },
+    "backbone": [
+        {
+            "type": "gcn",
+            "gcn_layers": 4,
+            "gcn_repetitions": 1,
+            "hidden_dim": 128,
+            "layer_type": "GatedGraphConv",
+            "activation": "None",
+            "input_dims": [4,0,0]
+        }
+    ],
     "heads": [
         {
             "type": "cls",
+            "target": "node",
             "field": "label",
-            "edge": false,
             "classes": [
                 "Name",
                 "None",

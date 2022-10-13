@@ -9,11 +9,12 @@ import torch
 from torch_geometric.data import Data
 
 from .nets import net_factory
-from .dataset import AddVectorAttr, DataBuild, NullDataBuild, AddEncodedAttr, ClassListEncoder, AddOneHotAttrEdgeClassifier
+from .dataset import AddReadOrderEdgeAttr, AddVectorAttr, DataBuild, NullDataBuild, AddEncodedAttr, ClassListEncoder
 from .evals import ArgMaxClassificationEval
 
 class Head(torch.nn.Module, ABC):
     def __init__(self, target):
+        super().__init__()
         self.target = target
         self.mapping = {
             "node": "x",
@@ -41,37 +42,35 @@ class Head(torch.nn.Module, ABC):
         return getattr(data, self.mapping[self.target])
 
 class HeadFactory:
-    def __init__(self, node_feature_size, edge_feature_size, graph_feature_size):
-        self.node_feature_size = node_feature_size
-        self.edge_feature_size = edge_feature_size
-        self.graph_feature_size = graph_feature_size
-    
+    def __init__(self, input_dims):
+        self.input_dims = input_dims
+
     def __call__(self, head_config) -> List[Head]:
         """Returns a list of heads according to the configuration"""
         type = head_config["type"]
-        edge = head_config["edge"]
         del head_config["type"]
         if type == "cls":
-            input_size = self.edge_feature_size if edge else self.node_feature_size
-            return ClassificationHead(input_size, **head_config)
-        elif type == "node_regr":
-            return RegressionHead(self.node_feature_size, **head_config)
+            return ClassificationHead(self.input_dims, **head_config)
+        elif type == "regr":
+            return RegressionHead(self.input_dims, **head_config)
         else:
             msg = f"Unknown head type '{type}'."
             logging.error(msg)
             raise ValueError(msg)
 
 class ClassificationHead(Head):
-    def __init__(self, input_dim, target, field, net_config, classes):
+    def __init__(self, input_dims, target, field, net_config, classes, read_order=False):
         super().__init__(target)
         self._validate_net_config(net_config)
-        net_config["input_dim"] = input_dim
+        net_config["input_dims"] = input_dims
         net_config["output_dim"] = len(classes)
+        net_config["target"] = target
         self.field = field
         self.net = net_factory(net_config)
         self.classes = classes
         self.criterion = torch.nn.CrossEntropyLoss()
         self.encoder = ClassListEncoder(self.classes)
+        self.read_order = read_order
         self.evaluator = ArgMaxClassificationEval(self.encoder)
 
     def forward(self, data):
@@ -91,7 +90,10 @@ class ClassificationHead(Head):
         return {self.field: loss}
     
     def get_data_build(self) -> DataBuild:
-        return AddEncodedAttr(self.field, self.field, self.encoder)
+        if self.read_order:
+            return AddReadOrderEdgeAttr(self.field, self.field, self.encoder)
+        else:
+            return AddEncodedAttr(self.field, self.field, self.encoder)
 
     def eval_add(self, data):
         output_value = self._get_output_value(data)
@@ -114,17 +116,18 @@ class ClassificationHead(Head):
         }
 
     def _validate_net_config(self, net_config):
-        forbidden_attributes = ["input_dim", "output_dim"]
+        forbidden_attributes = ["input_dims", "output_dim", "target"]
         for forbidden_attribute in forbidden_attributes:
             if forbidden_attribute in net_config:
                 raise ValueError(f"Invalid 'net_config' for classification head, found '{forbidden_attribute}' attribute which is set automatically.")
 
 class RegressionHead(Head):
-    def __init__(self, input_dim, target, field, net_config, edge=False):
+    def __init__(self, input_dims, target, field, net_config, edge=False):
         super().__init__(target)
         self._validate_net_config(net_config)
-        net_config["input_dim"] = input_dim
+        net_config["input_dims"] = input_dims
         net_config["output_dim"] = 1
+        net_config["target"] = target
         self.field = field
         self.net = net_factory(net_config)
         self.criterion = torch.nn.MSELoss()
@@ -148,7 +151,7 @@ class RegressionHead(Head):
         return AddVectorAttr(self.field, [self.field])
 
     def _validate_net_config(self, net_config):
-        forbidden_attributes = ["input_dim", "output_dim"]
+        forbidden_attributes = ["input_dims", "output_dim", "target"]
         for forbidden_attribute in forbidden_attributes:
             if forbidden_attribute in net_config:
                 raise ValueError(f"Invalid 'net_config' for regression head, found '{forbidden_attribute}' attribute which is set automatically.")

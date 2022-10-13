@@ -4,6 +4,7 @@
 import logging
 from abc import ABC, abstractmethod
 from copy import copy
+from turtle import forward
 from typing import List, Tuple
 
 import torch
@@ -12,7 +13,7 @@ import torch_geometric
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 
-class Backbone(ABC):
+class Net(ABC):
     @abstractmethod
     def get_output_dims(self) -> Tuple[int, int, int]:
         """When overridden should return dims of node, edge and graph features"""
@@ -27,43 +28,68 @@ def net_factory(config):
         return GCN(**config)
     elif net_type == "identity":
         return IdentityNet(**config)
+    elif net_type == "edge_nodeconcat":
+        return EdgeNodeConcatNet(**config)
     else:
         msg = f"Unknown network type '{net_type}'."
         logging.error(msg)
         raise ValueError(msg)
 
-class SequentialBackbone(Backbone):
-    def __init__(self, nets: List[Backbone]):
-        if len(nets) < 1:
-            msg = f"At least one nets is required to build a sequential backbone"
+class SequentialBackbone(torch.nn.Module, Net):
+    def __init__(self, backbone_config):
+        super().__init__()
+        if len(backbone_config) < 1:
+            msg = f"At least one net is required to build a sequential backbone"
             logging.error(msg)
             raise ValueError(msg)
+        
+        nets = [net_factory(backbone_config[0])]
+        for cfg in backbone_config[1:]:
+            cfg["input_dims"] = nets[-1].get_output_dims()
+            nets.append(net_factory(cfg))
 
-        self.nets = nets
+        self.nets = torch.nn.ModuleList(nets)
+
+    def forward(self, data):
+        for net in self.nets:
+            data = net(data)
+        return data
 
     def get_output_dims(self) -> Tuple[int, int, int]:
         return self.nets[-1].get_output_dims()
 
-class IdentityNet(torch.nn.Module, Backbone):
-    def __init__(self, input_dim=None, output_dim=None):
+class IdentityNet(torch.nn.Module, Net):
+    def __init__(self, input_dims=None, output_dim=None):
         super().__init__()
-        if input_dim != output_dim:
-            msg = f"Input dim and output dim should be equal but they differ {input_dim}!={output_dim}."
-            logging.error(msg)
-            raise ValueError(msg)
-        
-        self.input_dim = input_dim
+        self.input_dims = input_dims
 
     def forward(self, batch):
         return copy(batch)
     
     def get_output_dims(self) -> Tuple[int, int, int]:
-        return self.input_dim, 0, 0
+        return self.input_dims
+
+class EdgeNodeConcatNet(torch.nn.Module, Net):
+    def __init__(self, input_dims):
+        super().__init__()
+        self.input_dims = input_dims
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        src = x[edge_index[0]]
+        dst = x[edge_index[1]]
+        edge_concat = torch.cat([src, dst], dim=-1)
+        d_copy = copy(data)
+        d_copy.edge_attr = edge_concat
+        return d_copy
+    
+    def get_output_dims(self) -> Tuple[int, int, int]:
+        return self.input_dims[0], 2*self.input_dims[0], self.input_dims[2]
 
 
-class MLP(torch.nn.Module, Backbone):
+class MLP(torch.nn.Module, Net):
 
-    def __init__(self, target, input_dim, output_dim, edge=False, hidden_dim=128, depth=4):
+    def __init__(self, target, input_dims, output_dim=None, hidden_dim=128, depth=4):
         super().__init__()
         self.target = target
         self.mapping = {
@@ -71,10 +97,18 @@ class MLP(torch.nn.Module, Backbone):
             "edge": "edge_attr",
             "graph": "graph_attr"
         }
-        layers = [ torch.nn.Linear(input_dim, hidden_dim)]
+        self.input_dims = input_dims
+        self.hidden_dim = hidden_dim
+        self.input_dim = self.input_dims[list(self.mapping.keys()).index(self.target)]
+        if output_dim is None:
+            self.output_dim = self.hidden_dim
+        else:
+            self.output_dim = output_dim
+
+        layers = [ torch.nn.Linear(self.input_dim, self.hidden_dim)]
         for i in range(depth - 1):
-            layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, hidden_dim)]
-        layers += [torch.nn.ReLU(), torch.nn.Linear(hidden_dim, output_dim)]
+            layers += [torch.nn.ReLU(), torch.nn.Linear(self.hidden_dim, self.hidden_dim)]
+        layers += [torch.nn.ReLU(), torch.nn.Linear(self.hidden_dim, self.output_dim)]
         self.net = torch.nn.Sequential(*layers)
 
     def forward(self, data):
@@ -91,16 +125,19 @@ class MLP(torch.nn.Module, Backbone):
         setattr(data, self.mapping[self.target], value)
 
     def get_output_dims(self) -> Tuple[int, int, int]:
-        pass
+        sizes = list(self.input_dims)
+        sizes[list(self.mapping.keys()).index(self.target)] = self.output_dim
+        return tuple(sizes)
 
 
-class GCN(torch.nn.Module, Backbone):
-    def __init__(self, input_dim, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
+class GCN(torch.nn.Module, Net):
+    def __init__(self, input_dims, hidden_dim=128, gcn_layers=2, gcn_repetitions=1, layer_type="GatedGraphConv", activation=None):
         super().__init__()
+        self.input_dims = input_dims
         self.hidden_dim = hidden_dim
         self.layer_type = layer_type.lower()
         self.input_mlp = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.Linear(self.input_dims[0], hidden_dim),
             torch.nn.ReLU())
         self.gcn_repetitions = gcn_repetitions
 
@@ -140,4 +177,4 @@ class GCN(torch.nn.Module, Backbone):
         return d_copy
 
     def get_output_dims(self) -> Tuple[int, int, int]:
-        return self.hidden_dim, 0, 0
+        return self.hidden_dim, self.input_dims[1], self.input_dims[2]

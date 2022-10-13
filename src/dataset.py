@@ -85,22 +85,23 @@ class ClassListEncoder:
         labels = torch.argmax(values, dim=1)
         return [self.classes[i] for i in labels]
 
-class AddOneHotAttrEdgeClassifier(DataBuild):
+class AddReadOrderEdgeAttr(DataBuild):
     def __init__(self, attr_name: str, field: str, encoder):
-        self.encoder = encoder
         self.attr_name = attr_name
         self.field = field
+        self.encoder = encoder
 
     def __call__(self, data: Data, graph) -> Data:
-        src, dst = data["edge_index"]
+        field_value = graph["nodes"][self.field].to_numpy()
+        src, dst = data.edge_index
         labels = []
         for s, d in zip(src, dst):
-            if s + 1 == d:
-                labels.append(str(1))
+            if int(field_value[s]) + 1 == int(field_value[d]):
+                labels.append("1")
             else:
-                labels.append(str(0))
-        one_hot_encoded = self.encoder.encode(labels).float()
-        setattr(data, self.attr_name, one_hot_encoded)
+                labels.append("0")
+        encoded = self.encoder.encode(labels)
+        setattr(data, self.attr_name, encoded)
         return data
 
 class AddEncodedAttr(DataBuild):

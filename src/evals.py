@@ -29,7 +29,7 @@ class ArgMaxClassificationEval(Eval):
     
     def add(self, pred, gt):
         pred_label = torch.argmax(pred, dim=1)
-        gt_label = torch.argmax(gt, dim=1)
+        gt_label = gt
         for i, j in zip(pred_label, gt_label):
             self.confusion_matrix[i, j] += 1
     

@@ -4,29 +4,39 @@
             "attr_name": "x",
             "type": "vector",
             "fields": [
-                "startX", "endX", "startY", "endY"
+                "startX",
+                "endX",
+                "startY",
+                "endY"
             ]
         }
     ],
-    "backbone": {
-        "type": "gcn",
-        "gcn_layers": 2,
-        "gcn_repetitions": 1,
-        "hidden_dim": 128,
-        "layer_type": "GATv2Conv",
-        "activation": "relu",
-        "input_dim": 4
-    },
+    "backbone": [
+        {
+            "type": "gcn",
+            "gcn_layers": 2,
+            "gcn_repetitions": 1,
+            "hidden_dim": 128,
+            "layer_type": "GatedGraphConv",
+            "activation": "relu",
+            "input_dims": [4,0,0]
+        },
+        {
+            "type": "edge_nodeconcat"
+        }
+    ],
     "heads": [
         {
-            "type": "cos_edge_cls",
+            "type": "cls",
+            "target": "edge",
             "field": "line_order",
+            "read_order": true,
             "classes": [
                 "0",
                 "1"
             ],
             "net_config": {
-                "type": "edgemlp"
+                "type": "mlp"
             }
         }
     ]

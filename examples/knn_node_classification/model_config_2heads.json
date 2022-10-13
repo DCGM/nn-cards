@@ -4,23 +4,28 @@
             "attr_name": "x",
             "type": "vector",
             "fields": [
-                "startX", "endX", "startY"
+                "startX",
+                "endX",
+                "startY"
             ]
         }
     ],
-    "backbone": {
-        "type": "gcn",
-        "gcn_layers": 4,
-        "gcn_repetitions": 1,
-        "hidden_dim": 128,
-        "layer_type": "GatedGraphConv",
-        "activation": "None",
-        "input_dim": 3
-    },
+    "backbone": [
+        {
+            "type": "gcn",
+            "gcn_layers": 4,
+            "gcn_repetitions": 1,
+            "hidden_dim": 128,
+            "layer_type": "GatedGraphConv",
+            "activation": "None",
+            "input_dims": [3,0,0]
+        }
+    ],
     "heads": [
         {
-            "type": "node_cls",
+            "type": "cls",
             "field": "label",
+            "target": "node",
             "classes": [
                 "Name",
                 "None",
@@ -39,8 +44,9 @@
             }
         },
         {
-            "type": "node_regr",
+            "type": "regr",
             "field": "endY",
+            "target": "node",
             "net_config": {
                 "type": "mlp"
             }
